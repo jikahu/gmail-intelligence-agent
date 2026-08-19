@@ -18,7 +18,6 @@ services:
     name: gmail-intelligence-agent
     runtime: python
     plan: free
-    pythonVersion: "3.13"
     # Installs both AI provider extras so switching AI_PROVIDER between
     # anthropic/openai is just an env var change, never a rebuild.
     buildCommand: pip install -e ".[anthropic,openai]"
@@ -26,6 +25,13 @@ services:
     healthCheckPath: /health
     autoDeploy: true
     envVars:
+      # Render's native Python service reads this env var to pick the
+      # interpreter version (there's no top-level `pythonVersion` Blueprint
+      # field for web services — that was a mistake in an earlier version of
+      # this file). The committed .python-version file is a second,
+      # redundant pin for the same thing.
+      - key: PYTHON_VERSION
+        value: "3.13.4"
       - key: APP_ENV
         value: production
       - key: LOG_LEVEL
