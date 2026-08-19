@@ -391,20 +391,36 @@ def create_app() -> FastAPI:
         """Color-code every already-existing ``AI/*`` label in Gmail per
         :data:`app.gmail.write_client.LABEL_COLORS`. Purely cosmetic (label
         color, not content or placement) so this isn't behind the DRY_RUN/
-        GMAIL_PROCESSING_ENABLED write gate -- it needs only the same
-        ``gmail.modify`` scope label creation already uses. Any label not yet
+        GMAIL_PROCESSING_ENABLED write gate -- it needs only the
+        ``gmail.labels`` scope label color-coding added. Any label not yet
         created in Gmail is skipped, not created; that stays classification's
         job via :meth:`~app.gmail.write_client.GmailWriteClient.ensure_labels`.
         """
+        from googleapiclient.errors import HttpError
+
         _require_full_grant()
         from app.gmail.write_client import get_write_client
 
         try:
             client = get_write_client()
+            outcomes = client.sync_label_colors()
         except NotConnectedError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except HttpError as exc:
+            if getattr(exc.resp, "status", None) == 403:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "Google rejected this with 'insufficient authentication "
+                        "scopes' -- the gmail.labels permission (added after this "
+                        "account was last connected) hasn't actually been granted "
+                        "yet, even if the stored token believes it has it. "
+                        "Reconnect at /oauth/start to grant it for real, then "
+                        "retry this call."
+                    ),
+                ) from exc
+            raise
 
-        outcomes = client.sync_label_colors()
         return JSONResponse(
             {
                 "colored": sum(1 for v in outcomes.values() if v == "colored"),

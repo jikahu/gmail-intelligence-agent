@@ -376,3 +376,27 @@ def test_sync_colors_works_even_with_write_gate_closed(
     assert write_client.synced_colors is True
     assert body["colored"] > 0
     assert body["not_created_yet"] == 0
+
+
+def test_sync_colors_reports_a_clear_error_when_the_scope_is_missing(
+    client: TestClient, gmail_write_wired, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A token that hasn't actually been granted gmail.labels yet (e.g. the
+    Render redeploy-seed case, which optimistically records every currently
+    active scope without a real re-consent) gets a clear 409, not a raw 500."""
+    from googleapiclient.errors import HttpError
+
+    class _FakeResp:
+        status = 403
+        reason = "insufficient scope"
+
+    _, write_client = gmail_write_wired
+
+    def _raise_insufficient_scope():
+        raise HttpError(_FakeResp(), b"insufficient authentication scopes")
+
+    write_client.sync_label_colors = _raise_insufficient_scope
+
+    resp = client.post("/gmail/labels/sync-colors")
+    assert resp.status_code == 409
+    assert "oauth/start" in resp.json()["detail"]
