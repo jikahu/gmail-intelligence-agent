@@ -1,0 +1,58 @@
+[project]
+name = "gmail-intelligence-agent"
+version = "0.1.0"
+description = "Personal Gmail intelligence agent — deterministic rules first, AI second, never auto-deletes email."
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+authors = [{ name = "jikahu" }]
+
+dependencies = [
+    "fastapi>=0.115,<1.0",
+    "uvicorn[standard]>=0.32,<1.0",
+    "pydantic>=2.9,<3.0",
+    "pydantic-settings>=2.6,<3.0",
+    "python-dotenv>=1.0,<2.0",
+    # Windows has no built-in IANA timezone database; tzdata provides it so
+    # zoneinfo.ZoneInfo("America/New_York") works everywhere.
+    "tzdata>=2024.2 ; sys_platform == 'win32'",
+    # Phase 1 — Google OAuth + Gmail/People read access.
+    "google-auth>=2.35,<3.0",
+    "google-auth-oauthlib>=1.2,<2.0",
+    "google-api-python-client>=2.150,<3.0",
+    # Fernet-encrypted token storage at rest.
+    "cryptography>=43.0,<46.0",
+    # Signed OAuth `state` value (CSRF protection).
+    "itsdangerous>=2.2,<3.0",
+    # Phase 5 — attachment text extraction. Both are parsers, not runtimes:
+    # neither executes macros or embedded scripts.
+    "pypdf>=5.1,<7.0",
+    "python-docx>=1.1,<2.0",
+    # Phase 9 — parses the Review-queue action buttons' POST form bodies.
+    "python-multipart>=0.0.12,<1.0",
+]
+
+[project.optional-dependencies]
+# AI providers are optional extras. Install only the one you use — the app
+# boots and classifies deterministically without either.
+anthropic = ["anthropic>=0.40,<1.0"]
+openai = ["openai>=1.60,<2.0"]
+dev = [
+    "pytest>=8.3,<9.0",
+    "pytest-asyncio>=0.24,<1.0",
+    "httpx>=0.28,<1.0",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra -q --strict-markers"
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"

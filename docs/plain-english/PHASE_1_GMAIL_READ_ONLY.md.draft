@@ -1,0 +1,117 @@
+# Phase 1 — Gmail read-only (plain English)
+
+## What was built
+
+The app can now **read** your Gmail. That's the only new power. Nothing about your email changes.
+
+From your point of view, the new things are:
+
+- A **Connect Gmail** button on the app's homepage.
+- A Google consent screen that shows up when you click it — Google's own screen, not ours — listing every permission the app is asking for.
+- A **preview page** that shows your last 10 messages (sender, subject, date, one-line snippet) as proof the connection works.
+- A **Disconnect** button that cleanly removes the app's access.
+
+The app can also read your Google Contacts and "Other Contacts" (people you email regularly but haven't formally saved). This is groundwork for a later safety rule that says: *don't hide email from people you actually talk to.*
+
+## Why this matters
+
+Everything the agent will eventually do — classify, organize, digest, alert — starts with "the app needs permission to look at your inbox". This phase sets that permission up in the safest possible way:
+
+1. It asks for the **smallest** set of Google permissions that later phases still need.
+2. It **never** asks for permission to send, modify, archive, or delete email. Google itself will block those actions even if a bug tried them.
+3. The permission Google gives back is stored **encrypted** on your own computer, unreadable to anyone who doesn't also have your app's secret key.
+4. The connection uses a signed handshake so a shady website can't trick your browser into finishing the connection on their behalf.
+
+> **Definitions:** *"OAuth"* is Google's system for granting an app one specific permission on your account without ever sharing your password. A *"scope"* is one specific permission (like "read Gmail"). A *"refresh token"* is the long-lived pass the app stores after you consent — kept encrypted here.
+
+## Exact Gmail permissions requested
+
+These are the **only** permissions the app asks for. The consent screen will show the same list.
+
+| Permission | What it lets the app do |
+|---|---|
+| Sign-in | Confirm which Google account you approved. |
+| Email address | See which Gmail address is connected. |
+| **Read Gmail** | Read message headers, bodies, labels, threads. **Cannot send, modify, or delete.** |
+| Read Contacts | See people you've saved as Google Contacts. |
+| Read Other Contacts | See people you've emailed but haven't formally saved. |
+
+## What it can and can't change in Gmail
+
+- **Can:** read message headers, message bodies, labels, threads, contacts.
+- **Cannot:** send, reply, forward, archive, delete, trash, mark as read/unread, mark as spam, add labels, remove labels, change settings, or make **any** modification.
+
+That's a hard limit of the "read Gmail" permission — Google itself rejects any write attempt, even if the app's code tried.
+
+## How you'd notice it worked
+
+- Before you connect: the homepage says "Not connected yet" and lists the exact permissions the app is about to request.
+- You click **Connect Gmail** and land on Google's own consent screen. It should show the same permission list as the homepage.
+- After you approve: the homepage now says "Connected as your.email@gmail.com".
+- Clicking **Preview last 10 messages** shows real message headers from your inbox (sender, subject, date, snippet).
+- Clicking **Disconnect** wipes the stored permission and returns the homepage to "Not connected yet".
+
+## How to undo it
+
+Phase 1 changes nothing on Google's side except granting a permission that *you* can revoke at any time. To fully undo:
+
+1. In the app, click **Disconnect** — this deletes the stored permission on your computer.
+2. Go to https://myaccount.google.com/permissions and revoke the "Gmail Intelligence Agent" grant on Google's side too.
+3. Nothing in your Gmail changed. The app couldn't have changed anything even if it wanted to.
+
+## What success looks like
+
+- Homepage shows the connect button and the full permission list before you connect.
+- Google's consent screen lists the same five permissions and nothing else.
+- After consent, the homepage shows "Connected as \<your email>".
+- The preview page shows real message headers.
+- Disconnect fully removes access.
+
+## What's next
+
+**Phase 2 — Sheets control store.** The app will auto-create a Google Sheets workbook that becomes your editable "control panel": rules, VIPs, learned suggestions, audit log, deadlines, etc. Still no Gmail modifications.
+
+---
+
+## Running it yourself
+
+You need three things ready before you start:
+
+- **A Google Cloud OAuth client** — the ID and secret Google gave you when you set up the project on their side. The client's "authorized redirect URL" must be exactly `http://localhost:8000/oauth/callback`, and your Gmail address must be listed as a "test user" on Google's consent screen settings.
+- **A random secret** the app uses to encrypt the stored Google permission. Generate one with:
+  ```powershell
+  py -3.13 -c "import secrets; print(secrets.token_urlsafe(48))"
+  ```
+
+Then, in PowerShell from the project folder:
+
+1. **Copy the example config file** (only needed the first time).
+   ```powershell
+   Copy-Item .env.example .env -ErrorAction SilentlyContinue
+   ```
+
+2. **Open `.env` in Notepad and fill in three values**: your Google client ID, your Google client secret, and the random secret from above.
+   ```powershell
+   notepad .env
+   ```
+
+3. **Activate the Python sandbox** built in Phase 0.
+   ```powershell
+   .\.venv\Scripts\Activate.ps1
+   ```
+
+4. **Run the self-check** — should end with a "passed" line.
+   ```powershell
+   pytest
+   ```
+
+5. **Start the app.**
+   ```powershell
+   uvicorn app.main:app --reload --port 8000
+   ```
+
+Then open `http://localhost:8000/` in your browser and click **Connect Gmail**.
+
+If Google's consent screen shows "This app isn't verified" — that's normal for a personal project. Add your Gmail address as a test user in Google's OAuth consent screen settings, or click "Advanced → Go to app (unsafe)". It's safe because *you* built the app; the warning exists to protect people from unknown developers.
+
+If Google says "redirect_uri_mismatch", the redirect URL saved in Google Cloud doesn't match `http://localhost:8000/oauth/callback` exactly. Fix it in Google Cloud → Credentials → your OAuth client.

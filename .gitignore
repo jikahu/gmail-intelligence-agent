@@ -1,0 +1,54 @@
+# Secrets — NEVER commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+token.json
+client_secret*.json
+oauth_tokens/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code local-only settings (machine-specific permission grants)
+.claude/settings.local.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local run artifacts
+*.log
+logs/
+data/local/

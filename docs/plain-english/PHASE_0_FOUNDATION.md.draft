@@ -1,0 +1,97 @@
+# Phase 0 — Foundation (plain English)
+
+## What was built
+
+The empty project folder is now a working web app skeleton. Think of it as pouring the concrete slab of a house — no rooms, no doors, no wiring yet, but a real foundation to build on.
+
+Specifically, the app can now:
+
+- Start up locally on your own computer.
+- Show a tiny welcome page in your browser.
+- Show a "status page" that tells you the app is alive and confirms its safety switches are ON.
+- Run its own internal self-check to verify nothing important is broken.
+
+That's it. No Gmail. No AI. No dashboard. No email logic.
+
+## Why this matters
+
+You can't safely bolt Gmail, AI, and email organizing onto nothing. This phase gives us three things every future phase depends on:
+
+1. A predictable way to start and stop the app.
+2. Safety switches that keep any accidental future code from touching your Gmail until you explicitly turn them on.
+3. A self-check the app can run before every change, so we catch mistakes before they reach your inbox.
+
+## What it can and can't change in Gmail
+
+**Nothing at all.** Phase 0 has never seen your Gmail, has no permission to see it, and contains no code that talks to Google.
+
+Two safety switches sit in the safest position by default:
+
+- **Dry-run mode is ON.** Even after Gmail code exists in later phases, dry-run means "look, don't touch".
+- **Gmail processing is OFF.** All Gmail work is turned off until you flip this on yourself.
+
+## How you'd notice it worked
+
+When the app is running, opening two links in your browser should show:
+
+- The welcome page — a small "Gmail Intelligence Agent" heading confirming the app is alive.
+- The status page — a short readout confirming the app is healthy, dry-run is on, and Gmail processing is off.
+
+That's the entire visible behavior of this phase.
+
+## How to undo it
+
+Phase 0 doesn't reach outside its own project folder. To fully undo:
+
+1. Stop the app (close the terminal window that's running it).
+2. Delete the project's private Python sandbox folder (called `.venv`) — this is throwaway and rebuilds itself.
+3. If you want to fully wipe: delete every file in the project folder except `CLAUDE.md`.
+
+Nothing outside the project folder changes. No Windows settings, no Gmail, no browser data, no scheduled tasks.
+
+## What success looks like
+
+- The app starts without errors.
+- The welcome page opens.
+- The status page shows the two safety switches in the correct positions (dry-run on, Gmail processing off).
+- The internal self-check passes.
+
+## What's next
+
+**Phase 1 — Gmail read-only.** The app will ask Google for permission to *read* (never modify) your Gmail. You'll see Google's own consent screen with the exact permissions listed. Phase 1 still won't change any email.
+
+---
+
+## Running it yourself
+
+You only need these if you want to actually start the app on your machine. Run them one at a time in PowerShell, from the project folder.
+
+1. **Build the project's private Python sandbox** — this keeps its dependencies from clashing with anything else on your computer.
+   ```powershell
+   py -3.13 -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   ```
+
+2. **Install the app and its self-check tools** — one-time step.
+   ```powershell
+   pip install -e ".[dev]"
+   ```
+
+3. **Run the self-check** — should end with a "passed" line.
+   ```powershell
+   pytest
+   ```
+
+4. **Start the app** — leaves a small web server running until you close the terminal.
+   ```powershell
+   uvicorn app.main:app --reload --port 8000
+   ```
+
+Then in your browser:
+
+- `http://localhost:8000/` → welcome page
+- `http://localhost:8000/health` → status page
+
+To stop the app, press `Ctrl + C` in the terminal window.
+
+If a step fails, the most common causes are: Python 3.13 isn't installed (download it from python.org), or port 8000 is busy (start on `--port 8001` instead).
