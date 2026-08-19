@@ -153,6 +153,11 @@ def exchange_code_for_token(code: str, state: str) -> StoredToken:
     stored.account_email = _try_lookup_email(creds)
 
     save_token(stored)
+
+    from app.google_api import clear_service_cache  # local import to avoid cycle
+
+    clear_service_cache()
+
     log.info(
         "oauth_token_stored",
         extra={"account_email": stored.account_email, "scopes": stored.scopes},

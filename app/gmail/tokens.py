@@ -143,11 +143,18 @@ def _seed_from_env() -> StoredToken | None:
         client_id=settings.google_client_id,
     )
     save_token(stored)
+
+    from app.google_api import clear_service_cache  # local import to avoid cycle
+
+    clear_service_cache()
     return stored
 
 
 def clear_token() -> bool:
     """Delete the stored token file. Returns True if a file was removed."""
+    from app.google_api import clear_service_cache  # local import to avoid cycle
+
+    clear_service_cache()
     if TOKEN_FILE.exists():
         TOKEN_FILE.unlink()
         return True
