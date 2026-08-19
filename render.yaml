@@ -47,7 +47,7 @@ services:
       - key: AI_PROVIDER
         value: anthropic
       - key: REALTIME_ENABLED
-        value: "false"
+        value: "true"
       - key: REALTIME_POLL_INTERVAL_SECONDS
         value: "120"
       # Secrets and deploy-specific values — set in the Render dashboard, do
