@@ -37,9 +37,9 @@ services:
       - key: LOG_LEVEL
         value: INFO
       - key: DRY_RUN
-        value: "true"
-      - key: GMAIL_PROCESSING_ENABLED
         value: "false"
+      - key: GMAIL_PROCESSING_ENABLED
+        value: "true"
       - key: DIGEST_TIMEZONE
         value: America/New_York
       - key: DIGEST_HOUR
