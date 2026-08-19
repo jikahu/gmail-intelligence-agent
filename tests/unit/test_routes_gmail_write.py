@@ -45,10 +45,17 @@ class FakeWriteClient:
         self.modify_calls: list[tuple[str, list[str], list[str]]] = []
         self.trash_calls: list[str] = []
         self.ensured_labels: list[str] = []
+        self.synced_colors = False
 
     def ensure_labels(self, names: list[str]) -> dict[str, str]:
         self.ensured_labels.extend(names)
         return {name: name for name in names}
+
+    def sync_label_colors(self) -> dict[str, str]:
+        self.synced_colors = True
+        from app.gmail.write_client import LABEL_COLORS
+
+        return {name: "colored" for name in LABEL_COLORS}
 
     def modify_message(self, message_id, *, add_label_ids=None, remove_label_ids=None):
         self.modify_calls.append((message_id, list(add_label_ids or []), list(remove_label_ids or [])))
@@ -350,3 +357,22 @@ def test_apply_never_calls_trash(
     _open_write_gate(monkeypatch, workbook)
     client.post("/gmail/apply", params={"limit": 2, "confirm": "true"})
     assert write_client.trash_calls == []
+
+
+# --------------------------------------------------------------------
+# Label color sync -- cosmetic, deliberately not behind the write gate
+# --------------------------------------------------------------------
+
+
+def test_sync_colors_works_even_with_write_gate_closed(
+    client: TestClient, gmail_write_wired
+) -> None:
+    """Coloring existing labels changes no content/placement, so it isn't
+    gated by DRY_RUN/GMAIL_PROCESSING_ENABLED/the acceptance run."""
+    _, write_client = gmail_write_wired
+    resp = client.post("/gmail/labels/sync-colors")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert write_client.synced_colors is True
+    assert body["colored"] > 0
+    assert body["not_created_yet"] == 0

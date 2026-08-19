@@ -386,6 +386,35 @@ def create_app() -> FastAPI:
             }
         )
 
+    @app.post("/gmail/labels/sync-colors", tags=["gmail"])
+    def gmail_sync_label_colors_route() -> JSONResponse:
+        """Color-code every already-existing ``AI/*`` label in Gmail per
+        :data:`app.gmail.write_client.LABEL_COLORS`. Purely cosmetic (label
+        color, not content or placement) so this isn't behind the DRY_RUN/
+        GMAIL_PROCESSING_ENABLED write gate -- it needs only the same
+        ``gmail.modify`` scope label creation already uses. Any label not yet
+        created in Gmail is skipped, not created; that stays classification's
+        job via :meth:`~app.gmail.write_client.GmailWriteClient.ensure_labels`.
+        """
+        _require_full_grant()
+        from app.gmail.write_client import get_write_client
+
+        try:
+            client = get_write_client()
+        except NotConnectedError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        outcomes = client.sync_label_colors()
+        return JSONResponse(
+            {
+                "colored": sum(1 for v in outcomes.values() if v == "colored"),
+                "not_created_yet": sum(
+                    1 for v in outcomes.values() if v == "not created yet"
+                ),
+                "labels": outcomes,
+            }
+        )
+
     # ---------- Sheets control workbook ----------
 
     @app.get("/sheets/status", tags=["sheets"])

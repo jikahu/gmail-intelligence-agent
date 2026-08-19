@@ -53,6 +53,18 @@ GMAIL_WRITE_SCOPES: tuple[str, ...] = (
 #: required" banner already handle prompting for that).
 PHASE_11_SCOPES: tuple[str, ...] = (*GMAIL_WRITE_SCOPES,)
 
+#: Set/change a label's color (the ``AI/*`` label color-coding feature).
+#: Confirmed empirically, not from the docs: Gmail's discovery document lists
+#: ``gmail.modify`` as an accepted scope for ``labels.create``/``labels.patch``,
+#: but in practice a token with only ``gmail.modify`` gets a real 403
+#: "insufficient authentication scopes" the moment a ``color`` field is
+#: included in either call -- Google enforces label color specifically behind
+#: this narrower scope. A user who connected before this feature must
+#: reconnect to grant it, same as any other post-Phase-11 scope addition.
+GMAIL_LABEL_COLOR_SCOPES: tuple[str, ...] = (
+    "https://www.googleapis.com/auth/gmail.labels",
+)
+
 #: Human-readable descriptions for each scope, surfaced in the dashboard and
 #: the plain-English docs so the user always knows what they granted.
 SCOPE_DESCRIPTIONS: Mapping[str, str] = {
@@ -65,6 +77,11 @@ SCOPE_DESCRIPTIONS: Mapping[str, str] = {
         "Add or remove Gmail labels, archive a message, and move a message to "
         "Gmail's own Trash (recoverable for 30 days). Does NOT allow sending "
         "mail or permanently deleting anything."
+    ),
+    "https://www.googleapis.com/auth/gmail.labels": (
+        "Set the color of the AI/* labels this app creates, so they're "
+        "visually distinct in your inbox. Does not grant reading, sending, "
+        "or deleting messages."
     ),
 }
 
@@ -79,6 +96,7 @@ __all__ = (
     "GMAIL_READ_SCOPES",
     "CONTACTS_READ_SCOPES",
     "GMAIL_WRITE_SCOPES",
+    "GMAIL_LABEL_COLOR_SCOPES",
     "PHASE_1_SCOPES",
     "PHASE_11_SCOPES",
     "SCOPE_DESCRIPTIONS",

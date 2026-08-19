@@ -25,6 +25,7 @@ from typing import Any
 
 from googleapiclient.discovery import Resource
 
+from app.classification.labels import Label
 from app.google_api import build_service, load_stored_token_or_raise
 from app.logging_config import get_logger
 
@@ -42,6 +43,33 @@ IMPORTANT_LABEL = "IMPORTANT"
 #: label state alone. Never written directly; only ``trash_message`` /
 #: ``untrash_message`` change it, via Gmail's own API behavior.
 TRASH_LABEL = "TRASH"
+
+#: One (background, text) color per ``AI/*`` label, so the taxonomy is
+#: visually distinguishable in Gmail's sidebar and message list -- not just a
+#: wall of same-colored tags. Both values must come from Gmail's own fixed
+#: palette (``users.labels`` API's ``LabelColor`` schema); arbitrary hex
+#: values are rejected with a 400. Colors group loosely by urgency/meaning:
+#: red/orange for things needing attention, blue for people/work, green for
+#: money, gray for low-value/expired, purple for reference material.
+LABEL_COLORS: dict[str, dict[str, str]] = {
+    Label.CRITICAL.value: {"backgroundColor": "#fb4c2f", "textColor": "#ffffff"},
+    Label.ACTION_REQUIRED.value: {"backgroundColor": "#ffad47", "textColor": "#000000"},
+    Label.PERSONAL.value: {"backgroundColor": "#a4c2f4", "textColor": "#1c4587"},
+    Label.WORK_BUSINESS.value: {"backgroundColor": "#4a86e8", "textColor": "#ffffff"},
+    Label.PURCHASES_RECEIPTS.value: {"backgroundColor": "#16a766", "textColor": "#ffffff"},
+    Label.NEWSLETTER.value: {"backgroundColor": "#a479e2", "textColor": "#ffffff"},
+    Label.LOW_VALUE.value: {"backgroundColor": "#999999", "textColor": "#ffffff"},
+    Label.REVIEW.value: {"backgroundColor": "#fad165", "textColor": "#000000"},
+    Label.EDUCATION.value: {"backgroundColor": "#43d692", "textColor": "#000000"},
+    Label.SECURITY.value: {"backgroundColor": "#cc3a21", "textColor": "#ffffff"},
+    Label.FINANCIAL.value: {"backgroundColor": "#149e60", "textColor": "#ffffff"},
+    Label.CAREER.value: {"backgroundColor": "#3c78d8", "textColor": "#ffffff"},
+    Label.SUSPICIOUS.value: {"backgroundColor": "#822111", "textColor": "#ffffff"},
+    Label.IMPORTANT_DOCUMENT.value: {"backgroundColor": "#285bac", "textColor": "#ffffff"},
+    Label.WAITING_FOR_REPLY.value: {"backgroundColor": "#eaa041", "textColor": "#000000"},
+    Label.SUBSCRIPTION_REVIEW.value: {"backgroundColor": "#8e63ce", "textColor": "#ffffff"},
+    Label.EXPIRED.value: {"backgroundColor": "#666666", "textColor": "#ffffff"},
+}
 
 
 class GmailWriteClient:
@@ -73,26 +101,51 @@ class GmailWriteClient:
         missing in Gmail. Gmail treats ``/`` in a label name as a nested-label
         separator on its own — creating ``AI/Financial`` directly is enough,
         no separate parent-label step is needed.
+
+        A newly created label gets its :data:`LABEL_COLORS` entry immediately,
+        if it has one, so the taxonomy is color-coded from the moment each
+        label first appears rather than needing a separate backfill step.
         """
         known = self._load_labels()
         missing = [name for name in names if name not in known]
         for name in missing:
+            body: dict[str, Any] = {
+                "name": name,
+                "labelListVisibility": "labelShow",
+                "messageListVisibility": "show",
+            }
+            color = LABEL_COLORS.get(name)
+            if color:
+                body["color"] = color
             created = (
                 self._service.users()
                 .labels()
-                .create(
-                    userId="me",
-                    body={
-                        "name": name,
-                        "labelListVisibility": "labelShow",
-                        "messageListVisibility": "show",
-                    },
-                )
+                .create(userId="me", body=body)
                 .execute()
             )
             known[name] = created["id"]
             log.info("gmail_label_created", extra={"label_name": name})
         return {name: known[name] for name in names}
+
+    def sync_label_colors(self) -> dict[str, str]:
+        """Apply :data:`LABEL_COLORS` to every already-existing ``AI/*``
+        label, for labels created before a color was assigned (or before this
+        method existed at all). Returns ``{label_name: outcome}`` for
+        reporting; never creates a label that doesn't already exist --
+        that's :meth:`ensure_labels`'s job.
+        """
+        known = self._load_labels()
+        outcomes: dict[str, str] = {}
+        for name, color in LABEL_COLORS.items():
+            label_id = known.get(name)
+            if label_id is None:
+                outcomes[name] = "not created yet"
+                continue
+            self._service.users().labels().patch(
+                userId="me", id=label_id, body={"color": color}
+            ).execute()
+            outcomes[name] = "colored"
+        return outcomes
 
     # -------- Message modification --------
 
@@ -155,6 +208,7 @@ __all__ = (
     "GmailWriteClient",
     "IMPORTANT_LABEL",
     "INBOX_LABEL",
+    "LABEL_COLORS",
     "TRASH_LABEL",
     "get_write_client",
 )

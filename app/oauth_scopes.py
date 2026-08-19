@@ -36,6 +36,7 @@ ACTIVE_SCOPES: tuple[str, ...] = _dedupe(
         *gmail_scopes.PHASE_1_SCOPES,
         *sheets_scopes.PHASE_2_SCOPES,
         *gmail_scopes.PHASE_11_SCOPES,
+        *gmail_scopes.GMAIL_LABEL_COLOR_SCOPES,
     )
 )
 

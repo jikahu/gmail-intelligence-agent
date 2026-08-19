@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from app.gmail.write_client import GmailWriteClient
+from app.gmail.write_client import LABEL_COLORS, GmailWriteClient
 
 
 def _fake_service(existing_labels: list[dict] | None = None) -> MagicMock:
@@ -72,6 +72,62 @@ def test_trash_and_untrash_call_the_right_endpoints() -> None:
 
     assert trash_call.call_args.kwargs["id"] == "m1"
     assert untrash_call.call_args.kwargs["id"] == "m1"
+
+
+def test_ensure_labels_sets_color_on_creation() -> None:
+    service = _fake_service()
+    create_call = service.users.return_value.labels.return_value.create
+    create_call.return_value.execute.return_value = {"id": "Label_1", "name": "AI/Critical"}
+
+    client = GmailWriteClient(service=service)
+    client.ensure_labels(["AI/Critical"])
+
+    body = create_call.call_args.kwargs["body"]
+    assert body["color"] == LABEL_COLORS["AI/Critical"]
+
+
+def test_ensure_labels_omits_color_for_an_unmapped_name() -> None:
+    """A label name with no entry in LABEL_COLORS (shouldn't happen for the
+    real taxonomy, but must not crash) creates without a color key at all."""
+    service = _fake_service()
+    create_call = service.users.return_value.labels.return_value.create
+    create_call.return_value.execute.return_value = {"id": "Label_1", "name": "Something/Else"}
+
+    client = GmailWriteClient(service=service)
+    client.ensure_labels(["Something/Else"])
+
+    body = create_call.call_args.kwargs["body"]
+    assert "color" not in body
+
+
+def test_sync_label_colors_patches_every_existing_taxonomy_label() -> None:
+    existing = [
+        {"name": name, "id": f"Label_{i}"} for i, name in enumerate(LABEL_COLORS)
+    ]
+    service = _fake_service(existing_labels=existing)
+    patch_call = service.users.return_value.labels.return_value.patch
+    patch_call.return_value.execute.return_value = {}
+
+    client = GmailWriteClient(service=service)
+    outcomes = client.sync_label_colors()
+
+    assert patch_call.call_count == len(LABEL_COLORS)
+    assert all(v == "colored" for v in outcomes.values())
+    first_name = next(iter(LABEL_COLORS))
+    matching_calls = [
+        c for c in patch_call.call_args_list if c.kwargs["id"] == "Label_0"
+    ]
+    assert matching_calls[0].kwargs["body"]["color"] == LABEL_COLORS[first_name]
+
+
+def test_sync_label_colors_skips_labels_not_yet_created() -> None:
+    service = _fake_service(existing_labels=[])
+    client = GmailWriteClient(service=service)
+
+    outcomes = client.sync_label_colors()
+
+    assert all(v == "not created yet" for v in outcomes.values())
+    assert not service.users.return_value.labels.return_value.patch.called
 
 
 def test_write_client_never_calls_a_permanent_delete_endpoint() -> None:
