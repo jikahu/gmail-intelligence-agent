@@ -1,10 +1,10 @@
 """Scope aggregation tests.
 
 The safety property under test: the app can never quietly acquire a
-permission beyond the documented write scopes -- ``gmail.modify`` (Phase 11:
-labels, archive, Trash; never send, never a permanent delete) and
-``gmail.labels`` (label color only) -- and can never acquire full Drive
-access when the narrow ``drive.file`` scope is what's documented.
+permission beyond the one, documented write scope Phase 11 deliberately adds
+(``gmail.modify`` — labels, archive, Trash; never send, and never a permanent
+delete), and can never acquire full Drive access when the narrow
+``drive.file`` scope is what's documented.
 """
 
 from __future__ import annotations
@@ -38,10 +38,7 @@ FORBIDDEN_DRIVE_SCOPES = {
 
 def test_active_scopes_is_the_sum_of_registered_phases() -> None:
     assert set(ACTIVE_SCOPES) == (
-        set(PHASE_1_SCOPES)
-        | set(PHASE_2_SCOPES)
-        | set(PHASE_11_SCOPES)
-        | set(GMAIL_LABEL_COLOR_SCOPES)
+        set(PHASE_1_SCOPES) | set(PHASE_2_SCOPES) | set(PHASE_11_SCOPES)
     )
 
 
@@ -57,19 +54,20 @@ def test_phase_11_adds_exactly_gmail_modify_and_nothing_else() -> None:
     """The one deliberate write scope this app ever asks for (CLAUDE.md §5)."""
     assert set(PHASE_11_SCOPES) == set(GMAIL_WRITE_SCOPES)
     assert PHASE_11_SCOPES == ("https://www.googleapis.com/auth/gmail.modify",)
-
-
-def test_active_scopes_beyond_phase_1_and_2_is_write_plus_label_color() -> None:
-    """Everything ACTIVE_SCOPES adds on top of the read-only Phase 1/2 grant is
-    exactly the two documented write scopes -- gmail.modify (Phase 11) and
-    gmail.labels (label color-coding) -- and nothing silently more."""
-    assert set(ACTIVE_SCOPES) - (set(PHASE_1_SCOPES) | set(PHASE_2_SCOPES)) == (
-        set(PHASE_11_SCOPES) | set(GMAIL_LABEL_COLOR_SCOPES)
+    assert set(ACTIVE_SCOPES) - (set(PHASE_1_SCOPES) | set(PHASE_2_SCOPES)) == set(
+        PHASE_11_SCOPES
     )
 
 
-def test_gmail_label_color_scope_adds_exactly_gmail_labels_and_nothing_else() -> None:
+def test_gmail_labels_scope_stays_out_of_active_scopes() -> None:
+    """gmail.labels (defined for the label-color feature) is deliberately NOT
+    requested yet: production testing showed Google rejects *every* token
+    refresh with 'invalid_scope' when it's included, because the scope was
+    never registered on this OAuth client's consent screen in Google Cloud
+    Console. Re-adding this to ACTIVE_SCOPES must be a deliberate act once
+    that's fixed, never an accidental one -- this test is the tripwire."""
     assert GMAIL_LABEL_COLOR_SCOPES == ("https://www.googleapis.com/auth/gmail.labels",)
+    assert not (set(ACTIVE_SCOPES) & set(GMAIL_LABEL_COLOR_SCOPES))
 
 
 def test_only_the_narrow_drive_scope_is_requested() -> None:
@@ -89,27 +87,15 @@ def test_every_active_scope_has_a_description() -> None:
 
 def test_missing_from_detects_a_stale_grant() -> None:
     """A token issued before Phase 2 must be reported as needing re-consent."""
-    missing = missing_from(
-        list(PHASE_1_SCOPES) + list(PHASE_11_SCOPES) + list(GMAIL_LABEL_COLOR_SCOPES)
-    )
+    missing = missing_from(list(PHASE_1_SCOPES) + list(PHASE_11_SCOPES))
     assert set(missing) == set(PHASE_2_SCOPES)
 
 
 def test_missing_from_detects_a_pre_phase_11_grant() -> None:
-    """A token issued before Phase 11 is missing the write scope (and the
-    later label-color scope) and must reconnect before any Gmail write is
-    attempted (CLAUDE.md §18)."""
+    """A token issued before Phase 11 is missing the write scope and must
+    reconnect before any Gmail write is attempted (CLAUDE.md §18)."""
     missing = missing_from(list(PHASE_1_SCOPES) + list(PHASE_2_SCOPES))
-    assert set(missing) == set(PHASE_11_SCOPES) | set(GMAIL_LABEL_COLOR_SCOPES)
-
-
-def test_missing_from_detects_a_pre_label_color_grant() -> None:
-    """A token issued before the label-color scope was added (e.g. right
-    after Phase 11) is missing exactly that one scope."""
-    missing = missing_from(
-        list(PHASE_1_SCOPES) + list(PHASE_2_SCOPES) + list(PHASE_11_SCOPES)
-    )
-    assert set(missing) == set(GMAIL_LABEL_COLOR_SCOPES)
+    assert set(missing) == set(PHASE_11_SCOPES)
 
 
 def test_missing_from_is_empty_for_a_full_grant() -> None:

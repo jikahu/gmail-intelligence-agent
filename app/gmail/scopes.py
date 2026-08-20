@@ -59,8 +59,16 @@ PHASE_11_SCOPES: tuple[str, ...] = (*GMAIL_WRITE_SCOPES,)
 #: but in practice a token with only ``gmail.modify`` gets a real 403
 #: "insufficient authentication scopes" the moment a ``color`` field is
 #: included in either call -- Google enforces label color specifically behind
-#: this narrower scope. A user who connected before this feature must
-#: reconnect to grant it, same as any other post-Phase-11 scope addition.
+#: this narrower scope.
+#:
+#: NOT currently included in ``app.oauth_scopes.ACTIVE_SCOPES`` -- requesting
+#: it in production caused Google to reject every token refresh with a real
+#: ``invalid_scope`` error (not just label-color calls, every Gmail call),
+#: because this scope was never added to this OAuth client's consent screen
+#: in Google Cloud Console (APIs & Services > OAuth consent screen > Scopes).
+#: That's a manual console step, not something this codebase can do. Add this
+#: back to ``ACTIVE_SCOPES`` only after that's done and a reconnect has been
+#: verified to keep refreshing cleanly (watch for ``RefreshError`` in logs).
 GMAIL_LABEL_COLOR_SCOPES: tuple[str, ...] = (
     "https://www.googleapis.com/auth/gmail.labels",
 )

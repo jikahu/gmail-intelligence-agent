@@ -31,12 +31,22 @@ def _dedupe(items: tuple[str, ...]) -> tuple[str, ...]:
 
 
 #: All scopes the app currently requests, in a stable, deduped order.
+#:
+#: GMAIL_LABEL_COLOR_SCOPES (gmail.labels) is deliberately NOT included here.
+#: Requesting it broke live token refresh in production with a real Google
+#: 'invalid_scope' error on every single refresh -- not just label-color
+#: calls, *everything* Gmail-related, because google-auth includes the full
+#: requested scope list on every refresh-token grant request, and Google
+#: rejects the whole request if any scope in it isn't actually registered on
+#: this OAuth client's consent screen. gmail.labels was never added there (a
+#: manual Google Cloud Console step, not something this codebase controls) --
+#: so until that's done and confirmed working, this scope must stay out of
+#: ACTIVE_SCOPES. See app/gmail/scopes.py's own docstring on the constant.
 ACTIVE_SCOPES: tuple[str, ...] = _dedupe(
     (
         *gmail_scopes.PHASE_1_SCOPES,
         *sheets_scopes.PHASE_2_SCOPES,
         *gmail_scopes.PHASE_11_SCOPES,
-        *gmail_scopes.GMAIL_LABEL_COLOR_SCOPES,
     )
 )
 
