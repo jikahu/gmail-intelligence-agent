@@ -113,12 +113,14 @@ app/gmail/
 app/scheduling/
   history.py   Gmail history-feed paging + gap detection
   poller.py    one poll cycle: find new mail, classify with thread context, apply
-  service.py   the background asyncio loop that calls poller.run_poll_cycle on a timer
+  service.py   RealTimePoller -- tracks the outcome of each poll for GET /realtime/status
   state.py     local JSON file holding the last-seen Gmail history id
   retry.py     retry wrapper for transient Gmail API failures
 ```
 
-Off by default (`REALTIME_ENABLED=false`). The first-ever poll bootstraps by recording the current history id without processing anything — turning real-time on never sweeps through whatever's already in the mailbox. Every later poll fetches only what's changed, classifies new messages with full thread context (so active-conversation protection works), and applies through the same `app/gmail/apply.py` gate and diff logic `/gmail/apply` uses. One bad thread or message is logged and skipped; it never stops the cycle.
+No background loop runs inside the app process. `POST /realtime/poll` runs exactly one cycle each time it's called; something outside the process (`.github/workflows/realtime-poll.yml`, currently — a GitHub Actions schedule hitting the deployed app every 10 minutes) is what turns that into "near real-time." That external trigger doubles as what keeps a Render free-plan instance from spinning down, since a loop that tried to live *inside* the process would just stop existing the moment the process went to sleep.
+
+The first-ever poll bootstraps by recording the current history id without processing anything — turning this on never sweeps through whatever's already in the mailbox. Every later poll fetches only what's changed, classifies new messages with full thread context (so active-conversation protection works), and applies through the same `app/gmail/apply.py` gate and diff logic `/gmail/apply` uses. One bad thread or message is logged and skipped; it never stops the cycle.
 
 ## Safety invariants
 

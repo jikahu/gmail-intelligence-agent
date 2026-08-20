@@ -9,7 +9,7 @@ A single-account Gmail classification agent. No dashboard, no Sheets workbook, n
 - **Existing-label ("vendor folder") matching** (`app/gmail/vendor_labels.py`) — new. Recognizes a Gmail label the user already made by hand (e.g. "Uber") and applies it alongside the taxonomy label, based on sender domain/name matching against the mailbox's existing label list.
 - **AI second opinion** (`app/ai/`) — unchanged in shape; only consulted when the deterministic rules can't settle a message.
 - **Local rules file** (`app/rules/`, `config/rules.toml`) — replaces the old Google Sheets control workbook. VIPs, sender rules, domain rules, read-only from the app's side, user-edited directly.
-- **Real-time processing** (`app/scheduling/`) — same poll-the-history-feed design as before, but the "last seen" cursor now lives in a local JSON file (`app/scheduling/state.py`) instead of a Sheets `Settings` row, and there's no audit-log write alongside each apply.
+- **Real-time processing** (`app/scheduling/`) — same poll-the-history-feed design as before, but the "last seen" cursor now lives in a local JSON file (`app/scheduling/state.py`) instead of a Sheets `Settings` row, there's no audit-log write alongside each apply, and there's no in-process background loop anymore either — see below.
 - **Manual apply + preview** (`app/main.py`, `app/gmail/write_service.py`) — `GET /classify/preview` and `POST /gmail/apply`, unchanged in shape from before.
 
 ## What changed, and why
@@ -23,6 +23,7 @@ Mechanical changes as part of that:
 - The golden-dataset regression test (`tests/golden_dataset/`, scored by `app/classification/golden.py`) moved from `app/acceptance/golden.py` to `app/classification/golden.py` — it never depended on Sheets or the live acceptance run, only on the classification engine, so it survived the cut essentially unchanged.
 - `app/main.py` was cut from ~40 routes to about a dozen: health, index, OAuth, `/gmail/preview`, `/classify/preview`, `/gmail/apply`, `/gmail/labels/sync-colors`, `/realtime/status`, `/realtime/poll`.
 - `app/config/settings.py` dropped every dashboard/digest/Sheets-specific field (`digest_timezone`, `digest_hour`, `digest_scheduler_enabled`, `dashboard_authorized_emails`, `dashboard_session_max_age_hours`, `dashboard_login_redirect_uri`, `sheets_workbook_id`, `review_confidence_threshold` — the last was declared but never actually wired to anything).
+- The in-process real-time background loop (`RealTimePoller.start()`/`.stop()`/an asyncio task ticking every `REALTIME_POLL_INTERVAL_SECONDS`) was removed, along with the `REALTIME_ENABLED` / `REALTIME_POLL_INTERVAL_SECONDS` settings. `POST /realtime/poll` still runs one cycle exactly as before; what changed is who calls it. On Render's free plan, a loop living inside the process just stops the moment the process sleeps (after 15 minutes with no traffic) — so instead, `.github/workflows/realtime-poll.yml` calls that endpoint from GitHub Actions every 10 minutes, which both drives the polling and keeps the service from ever fully sleeping. `app/scheduling/service.py:RealTimePoller` now only tracks the outcome of each call for `GET /realtime/status`; it owns no timer and no task.
 
 ## Known gaps / deliberate non-goals
 
@@ -30,6 +31,7 @@ Mechanical changes as part of that:
 - **No attachment content in classification.** `Important-Document` detection still fires on subject wording or a document-shaped attachment (by mime type/filename), but no longer looks at what a PDF actually says — the text-extraction layer that used to feed that is gone.
 - **`gmail.labels` scope still excluded** from `ACTIVE_SCOPES` (see above) — label color-coding (`POST /gmail/labels/sync-colors`) will keep 403ing until that Google Cloud Console step happens.
 - **The real-time history cursor doesn't survive a Render redeploy** (local file, ephemeral filesystem, no seed mechanism like the OAuth token has). A redeploy just means the next poll re-bootstraps from "now" — a brief coverage gap, not a correctness issue.
+- **Real-time processing now depends on an external trigger actually running.** If `.github/workflows/realtime-poll.yml` is disabled, deleted, or GitHub Actions is unavailable, nothing calls `/realtime/poll` automatically anymore — there's no in-process fallback. `GET /realtime/status`'s `last_run_at` is the way to notice this has quietly stopped.
 
 ## Testing
 

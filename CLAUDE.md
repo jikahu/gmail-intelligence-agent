@@ -179,7 +179,7 @@ A missing or unparsable file degrades to an empty ruleset rather than failing â€
 
 **Manual apply.** `POST /gmail/apply` classifies up to `limit` recent messages and, only with `confirm=true` and the write gate open, applies the result for real.
 
-**Real-time processing.** A background loop (off unless `REALTIME_ENABLED=true`) polls Gmail's history feed every `REALTIME_POLL_INTERVAL_SECONDS` for new mail, classifies each message with full thread context, and applies it if the write gate allows. Idempotent, retries transient failures, never lets one bad message stop the cycle. `POST /realtime/poll` runs one cycle by hand.
+**Real-time processing.** No background loop runs inside the app â€” `POST /realtime/poll` runs exactly one cycle (find mail new since the last check, classify each message with full thread context, apply if the write gate allows) whenever it's called. Something outside the process is expected to call it on a timer; `.github/workflows/realtime-poll.yml` does that every 10 minutes against the deployed app. Idempotent, retries transient failures, never lets one bad message stop the cycle.
 
 **No dashboard, no digest, no audit trail, no Undo.** The `/classify/preview` and `/gmail/apply` (with `confirm=false`, the default) responses are the only place to see what the agent thinks before it acts. There is nothing to review after the fact beyond Gmail's own label state and this app's logs.
 

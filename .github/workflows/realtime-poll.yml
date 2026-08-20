@@ -1,0 +1,36 @@
+name: Poll Gmail for new mail
+
+# Calls the deployed app's POST /realtime/poll on a timer instead of running
+# a background loop inside the app itself. That endpoint finds mail that's
+# new since the last check, classifies it, and applies it if the write gate
+# (DRY_RUN=false + GMAIL_PROCESSING_ENABLED=true) is open on the server.
+#
+# The 10-minute interval is deliberate: Render's free plan spins the service
+# down after 15 minutes with no incoming requests, so a ping every 10
+# minutes both checks for mail and keeps the service from ever fully
+# sleeping — see render.yaml.
+#
+# APP_URL isn't secret (it's just the app's public base URL), but it lives
+# in a repo variable rather than being hardcoded so changing host doesn't
+# need a code change. Set it once under this repo's Settings -> Secrets and
+# variables -> Actions -> Variables -> New repository variable, name
+# APP_URL, value e.g. https://gmail-intelligence-agent.onrender.com
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST /realtime/poll
+        env:
+          APP_URL: ${{ vars.APP_URL || 'https://gmail-intelligence-agent.onrender.com' }}
+        run: |
+          curl --fail-with-body --silent --show-error \
+            --max-time 90 \
+            -X POST "$APP_URL/realtime/poll" \
+            -o response.json -w "\nHTTP %{http_code}\n"
+          cat response.json

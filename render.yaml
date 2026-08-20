@@ -3,8 +3,11 @@
 # Plan: free. This is a personal, single-account project — the $7/month
 # Starter plan isn't needed. The trade-off: a free web service spins down
 # after 15 minutes with no incoming requests and takes about a minute to
-# wake back up, and while asleep the background real-time mail poll loop is
-# asleep too.
+# wake back up. There's no background loop running inside this app to worry
+# about going to sleep, though — POST /realtime/poll is called on a timer by
+# .github/workflows/realtime-poll.yml (every 10 minutes, comfortably inside
+# that 15-minute window), which both checks for new mail and keeps the
+# service from spinning down in the first place.
 #
 # Free services also can't attach a persistent disk, so local files
 # (including the OAuth token file) don't survive a redeploy. That's handled
@@ -40,10 +43,6 @@ services:
         value: "true"
       - key: AI_PROVIDER
         value: anthropic
-      - key: REALTIME_ENABLED
-        value: "true"
-      - key: REALTIME_POLL_INTERVAL_SECONDS
-        value: "120"
       # Secrets and deploy-specific values — set in the Render dashboard, do
       # NOT commit real values here. All are blank until you set them.
       - key: ANTHROPIC_API_KEY

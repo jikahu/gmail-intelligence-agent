@@ -13,7 +13,7 @@ What it does:
 - Connects one Gmail account via OAuth.
 - Classifies mail with a deterministic rules engine (`app/classification/`), consulting an AI provider only when the rules can't settle it.
 - Applies the result as real Gmail labels (`Critical`, `Review`, `Financial`, ...) — plus, additively, any existing label whose name matches the sender (e.g. `Uber`).
-- Runs a background loop that classifies new mail as it arrives (off by default).
+- Classifies new mail as it arrives — `POST /realtime/poll` runs one check-and-apply cycle, called on a timer from outside the app (a GitHub Actions workflow, `.github/workflows/realtime-poll.yml`, does this every 10 minutes against the deployed app; there's no in-process background loop).
 - Reads VIPs and sender/domain rules from a single checked-in file, `config/rules.toml`, that you edit directly.
 
 ## Requirements
@@ -62,7 +62,7 @@ Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and a real `SESSION_SECRET` in `.
 
 - `GET /classify/preview?limit=25` — read-only. Shows what the rules engine (and, if configured, the AI) would do to your last 25 messages. Changes nothing.
 - `POST /gmail/apply?limit=10&confirm=true` — classifies and, if the write gate is open (see below), actually applies it to Gmail.
-- `GET /realtime/status` / `POST /realtime/poll` — the background real-time loop's status, and a way to run one cycle by hand.
+- `GET /realtime/status` / `POST /realtime/poll` — what the last few scheduled polls did, and a way to trigger one cycle by hand at any time.
 
 ## Rules file
 
@@ -77,10 +77,12 @@ See [`CLAUDE.md` §4](CLAUDE.md) for the canonical repo layout.
 - `DRY_RUN=true` — never modifies Gmail unless explicitly disabled.
 - `GMAIL_PROCESSING_ENABLED=false` — no Gmail writes until you opt in. Both `DRY_RUN=false` and `GMAIL_PROCESSING_ENABLED=true` are required together before any write path touches Gmail (`app/gmail/apply.py:check_write_gate`).
 - Gmail access is `gmail.readonly` plus `gmail.modify` (labels, archive — never send, never Trash, never a permanent delete).
-- `REALTIME_ENABLED=false` by default — the background poll loop that classifies new mail is off until you turn it on. Turning it on doesn't by itself allow writes; the same gate above still applies.
+- There's no on/off switch for real-time processing — `POST /realtime/poll` just does nothing new if nothing's called it. Whether anything happens automatically depends entirely on whether something outside the app is calling that endpoint on a schedule (see Deployment below).
 - The app refuses to start in production (`APP_ENV=production`) with a still-default `SESSION_SECRET` — a failed deploy with a clear error, rather than a live app encrypting the Gmail token with a secret published in this repo.
 - No AI keys are required to run the app — classification stays fully deterministic without one.
 
 ## Deployment
 
 Deploys to Render's free plan via [`render.yaml`](render.yaml). Render wipes local disk on every redeploy; `GOOGLE_OAUTH_SEED_REFRESH_TOKEN` (shown once on the Gmail-connected confirmation page after your first connect, pasted into Render's dashboard by hand) is what keeps the connection alive across redeploys without a paid persistent disk — see `app/gmail/tokens.py`.
+
+**Keeping it processing mail automatically.** `.github/workflows/realtime-poll.yml` calls the deployed app's `POST /realtime/poll` every 10 minutes via GitHub Actions — free, and frequent enough to also stop Render's free plan from spinning the service down (which happens after 15 minutes with no traffic). It targets `https://gmail-intelligence-agent.onrender.com` by default; if you rename the Render service or move hosts, set a repository variable named `APP_URL` (Settings → Secrets and variables → Actions → Variables) to override it. No separate cron service or paid plan required.

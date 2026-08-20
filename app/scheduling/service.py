@@ -1,20 +1,17 @@
-"""The always-on side of Phase 13: a background loop that calls
-:func:`app.scheduling.poller.run_poll_cycle` on a timer.
+"""Tracks the outcome of each on-demand poll cycle.
 
-Started from FastAPI's startup event, and only when
-``settings.realtime_enabled`` is true — off by default, the same
-conservative-until-opted-in pattern as ``dry_run`` / ``gmail_processing_enabled``.
-Turning this on starts the *loop*; it does not by itself allow Gmail writes —
-``check_write_gate`` still applies to every write a cycle attempts, exactly
-like every other write path in this app. A user can also trigger a single
-cycle by hand at any time via ``POST /realtime/poll``, whether or not this
-loop is running; :func:`app.scheduling.poller.run_poll_cycle` is the one
-implementation both paths share.
+There is no in-process background loop anymore — that used to mean an
+asyncio task ticking every ``REALTIME_POLL_INTERVAL_SECONDS`` forever, which
+only works while the process itself stays resident. On a host that sleeps
+after a period of no traffic (e.g. Render's free plan), a loop like that
+just stops running along with the rest of the process, silently.
 
-Gmail and Sheets calls are synchronous (``googleapiclient`` has no asyncio
-support), so each cycle runs in a worker thread via ``asyncio.to_thread``
-rather than blocking the event loop that serves the dashboard and every other
-route for however long a poll takes.
+Instead, something *outside* this process — a cron job, a scheduled HTTP
+ping, Windows Task Scheduler — is expected to call ``POST /realtime/poll``
+on a timer. That request is what wakes a sleeping host back up, so the
+"loop" and the "keep the host awake" problem solve each other instead of
+fighting. This module just remembers what happened the last few times that
+endpoint was hit, so ``GET /realtime/status`` has something honest to show.
 """
 
 from __future__ import annotations
@@ -23,11 +20,6 @@ import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from app.google_api import NotConnectedError
-from app.logging_config import get_logger
-
-log = get_logger("app.scheduling.service")
-
 
 @dataclass
 class RealTimeStatus:
@@ -35,7 +27,6 @@ class RealTimeStatus:
     what's already safe to show: no message content, just counts and a
     result label."""
 
-    running: bool = False
     poll_count: int = 0
     last_run_at: str | None = None
     #: "ok" | "bootstrapped" | "not_connected" | "error"
@@ -46,7 +37,6 @@ class RealTimeStatus:
 
     def as_dict(self) -> dict[str, object]:
         return {
-            "running": self.running,
             "poll_count": self.poll_count,
             "last_run_at": self.last_run_at,
             "last_result": self.last_result,
@@ -57,67 +47,49 @@ class RealTimeStatus:
 
 
 class RealTimePoller:
-    """Owns the background asyncio task. One instance lives on the FastAPI
-    app (``app.state.realtime_poller``) for the process's lifetime."""
+    """Owns the status snapshot. One instance lives on the FastAPI app
+    (``app.state.realtime_poller``) for the process's lifetime — which, on a
+    host that sleeps, may only be a few minutes at a time. That's fine:
+    there's nothing here that needs to survive a restart, and the real,
+    durable state (the Gmail history cursor) already lives in
+    :mod:`app.scheduling.state`, not here.
+    """
 
-    def __init__(self, interval_seconds: int) -> None:
-        self.interval_seconds = interval_seconds
+    def __init__(self) -> None:
         self.status = RealTimeStatus()
-        self._task: asyncio.Task | None = None
 
-    def start(self) -> None:
-        if self._task is not None:
-            return
-        self.status.running = True
-        self._task = asyncio.create_task(self._loop(), name="realtime-poller")
-        log.info("realtime_poller_started", extra={"interval_seconds": self.interval_seconds})
-
-    async def stop(self) -> None:
-        if self._task is None:
-            return
-        self._task.cancel()
-        try:
-            await self._task
-        except asyncio.CancelledError:
-            pass
-        self._task = None
-        self.status.running = False
-        log.info("realtime_poller_stopped")
-
-    async def _loop(self) -> None:
-        while True:
-            await self.run_one_cycle()
-            await asyncio.sleep(self.interval_seconds)
-
-    async def run_one_cycle(self) -> None:
+    async def run_one_cycle(self, use_ai: bool = True):
         """Run exactly one poll cycle and record the outcome in ``status``.
 
-        Never raises — a bad cycle (no connected account yet, a transient
-        Gmail/Sheets error that outlasted its own retries) is logged and
-        recorded in ``status`` so the loop keeps running for the next tick,
-        the same "log failures, keep going" contract the poll cycle itself
-        applies to individual messages.
+        Unlike the old background-loop version, this does **not** swallow
+        the exception — the caller (the ``/realtime/poll`` route) needs to
+        know whether the call actually succeeded, so it can return the right
+        HTTP status to whatever's calling it on a schedule. The outcome is
+        still recorded first, so ``GET /realtime/status`` reflects it even
+        if the caller doesn't inspect the exception itself.
         """
         from app.scheduling.poller import run_poll_cycle
 
         self.status.poll_count += 1
         self.status.last_run_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
         try:
-            report = await asyncio.to_thread(run_poll_cycle)
-        except NotConnectedError:
-            self.status.last_result = "not_connected"
-            self.status.last_error = None
-            return
-        except Exception as exc:  # noqa: BLE001 — the loop must survive one bad cycle
-            self.status.last_result = "error"
-            self.status.last_error = str(exc)
-            log.warning("realtime_poll_cycle_errored", extra={"error": str(exc)})
-            return
+            report = await asyncio.to_thread(run_poll_cycle, use_ai=use_ai)
+        except Exception as exc:
+            from app.google_api import NotConnectedError
+
+            if isinstance(exc, NotConnectedError):
+                self.status.last_result = "not_connected"
+                self.status.last_error = None
+            else:
+                self.status.last_result = "error"
+                self.status.last_error = str(exc)
+            raise
 
         self.status.last_error = None
         self.status.last_result = "bootstrapped" if report.bootstrapped else "ok"
         self.status.last_messages_processed = report.messages_processed
         self.status.last_changed_count = report.changed_count
+        return report
 
 
 __all__ = ("RealTimePoller", "RealTimeStatus")

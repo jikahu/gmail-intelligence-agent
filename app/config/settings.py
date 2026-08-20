@@ -17,7 +17,6 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -69,14 +68,6 @@ class Settings(BaseSettings):
     # Web session. Signs the OAuth CSRF `state` value and derives the key
     # that encrypts the stored refresh token on disk.
     session_secret: str = "change-me-to-a-long-random-string"
-
-    # Near-real-time processing. Off by default — the same
-    # conservative-until-opted-in pattern as dry_run/gmail_processing_enabled.
-    # Turning this on starts a background poll loop; it does not by itself
-    # allow Gmail writes — check_write_gate still applies to every write this
-    # loop attempts, exactly like every other write path in the app.
-    realtime_enabled: bool = False
-    realtime_poll_interval_seconds: int = Field(default=120, ge=30, le=3600)
 
     @property
     def is_production(self) -> bool:

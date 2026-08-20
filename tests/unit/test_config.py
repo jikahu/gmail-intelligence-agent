@@ -27,9 +27,3 @@ def test_env_overrides_are_read(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.dry_run is False
     assert settings.gmail_processing_enabled is True
     assert settings.ai_provider == "openai"
-
-
-def test_realtime_poll_interval_bounds_enforced(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("REALTIME_POLL_INTERVAL_SECONDS", "10")
-    with pytest.raises(ValueError):
-        reload_settings()

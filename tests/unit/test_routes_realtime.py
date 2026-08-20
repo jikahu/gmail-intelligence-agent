@@ -52,14 +52,13 @@ def wired(monkeypatch: pytest.MonkeyPatch):
 # --------------------------------------------------------------------
 
 
-def test_status_reports_disabled_by_default(client: TestClient) -> None:
+def test_status_reports_nothing_polled_yet_by_default(client: TestClient) -> None:
     resp = client.get("/realtime/status")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["enabled"] is False
-    assert body["running"] is False
     assert body["poll_count"] == 0
-    assert "poll_interval_seconds" in body
+    assert body["last_run_at"] is None
+    assert body["last_result"] is None
 
 
 # --------------------------------------------------------------------

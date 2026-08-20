@@ -20,8 +20,10 @@ Routes:
   `confirm=true` and the write gate open (``DRY_RUN=false`` and
   ``GMAIL_PROCESSING_ENABLED=true``), actually apply it.
 - ``/gmail/labels/sync-colors`` — cosmetic label color-coding.
-- ``/realtime/*`` — the background poll loop that classifies new mail as it
-  arrives, and a manual way to run one cycle by hand.
+- ``/realtime/*`` — runs one check-for-new-mail-and-classify-it cycle.
+  Meant to be called on a timer by something outside this process (a cron
+  job, a scheduled HTTP ping) rather than looped internally — see
+  ``app/scheduling/service.py`` for why.
 """
 
 from __future__ import annotations
@@ -69,15 +71,16 @@ def create_app() -> FastAPI:
             "Personal Gmail intelligence agent. Read-only Gmail access, a "
             "deterministic rules engine, an AI second opinion for what the "
             "rules can't settle, real Gmail label writes gated behind "
-            "DRY_RUN and GMAIL_PROCESSING_ENABLED, and near-real-time "
-            "processing of new mail via a background poll loop (off by "
-            "default; REALTIME_ENABLED=true turns it on)."
+            "DRY_RUN and GMAIL_PROCESSING_ENABLED, and a POST /realtime/poll "
+            "endpoint meant to be called on a timer by something outside "
+            "this process (a cron job, a scheduled ping) to classify new "
+            "mail as it arrives."
         ),
     )
 
     from app.scheduling.service import RealTimePoller
 
-    app.state.realtime_poller = RealTimePoller(settings.realtime_poll_interval_seconds)
+    app.state.realtime_poller = RealTimePoller()
 
     # ---------- System endpoints ----------
 
@@ -360,40 +363,27 @@ def create_app() -> FastAPI:
         )
 
     # ---------- Near-real-time processing ----------
-
-    @app.on_event("startup")
-    async def _start_realtime_poller() -> None:
-        if settings.realtime_enabled:
-            app.state.realtime_poller.start()
-        else:
-            log.info("realtime_poller_not_started", extra={"realtime_enabled": False})
-
-    @app.on_event("shutdown")
-    async def _stop_realtime_poller() -> None:
-        await app.state.realtime_poller.stop()
+    #
+    # No background loop runs inside this process. Something outside it —
+    # a cron job, a scheduled HTTP ping, Windows Task Scheduler — is meant
+    # to call POST /realtime/poll on a timer instead. That request is also
+    # what wakes a sleeping host (e.g. Render's free plan) back up, so
+    # there's no "the loop died while the host was asleep" failure mode to
+    # worry about — see app/scheduling/service.py.
 
     @app.get("/realtime/status", tags=["realtime"])
     def realtime_status() -> JSONResponse:
-        return JSONResponse(
-            {
-                "enabled": settings.realtime_enabled,
-                "poll_interval_seconds": settings.realtime_poll_interval_seconds,
-                **app.state.realtime_poller.status.as_dict(),
-            }
-        )
+        return JSONResponse(app.state.realtime_poller.status.as_dict())
 
     @app.post("/realtime/poll", tags=["realtime"])
-    def realtime_poll(use_ai: bool = True) -> JSONResponse:
-        """Run exactly one poll cycle right now, whether or not the
-        background loop (REALTIME_ENABLED) is on. The same function the
-        background loop calls on a timer — a manual way to see near-real-time
-        processing work without waiting for the interval, or to catch up
-        immediately after turning REALTIME_ENABLED on.
+    async def realtime_poll(use_ai: bool = True) -> JSONResponse:
+        """Run exactly one poll cycle right now: find mail that's new since
+        the last call, classify it, and apply it if the write gate allows.
+        Call this on a schedule from outside the app — see the module
+        docstring above.
         """
-        from app.scheduling import poller as realtime_poller_module
-
         try:
-            report = realtime_poller_module.run_poll_cycle(use_ai=use_ai)
+            report = await app.state.realtime_poller.run_one_cycle(use_ai=use_ai)
         except NotConnectedError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
