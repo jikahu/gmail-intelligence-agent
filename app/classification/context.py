@@ -124,20 +124,20 @@ def build_rule(
     )
 
 
-def context_from_workbook(
-    workbook,
+def context_from_rules(
+    rules_file,
     user_email: str = "",
     known_contacts: set[str] | None = None,
     prior_correspondents: set[str] | None = None,
 ) -> ClassificationContext:
-    """Assemble a context from the Sheets control workbook.
+    """Assemble a context from the local rules file.
 
-    ``workbook`` is a :class:`app.sheets.repository.ControlWorkbook`. Typed
-    loosely so this module doesn't import the Sheets layer — the engine stays
+    ``rules_file`` is an :class:`app.rules.store.RulesFile`. Typed loosely so
+    this module doesn't import the rules-storage layer — the engine stays
     independent of where the rules are stored.
     """
     sender_rules: dict[str, Rule] = {}
-    for row in workbook.rules.get_sender_rules():
+    for row in rules_file.sender_rules:
         rule = build_rule(
             target=row.sender,
             rule_type=row.rule_type,
@@ -149,7 +149,7 @@ def context_from_workbook(
             sender_rules[rule.target] = rule
 
     domain_rules: dict[str, Rule] = {}
-    for row in workbook.rules.get_domain_rules():
+    for row in rules_file.domain_rules:
         rule = build_rule(
             target=row.domain,
             rule_type=row.rule_type,
@@ -164,7 +164,7 @@ def context_from_workbook(
         user_email=(user_email or "").strip().lower(),
         sender_rules=sender_rules,
         domain_rules=domain_rules,
-        vip_emails=workbook.vips.approved_emails(),
+        vip_emails=set(rules_file.vip_emails),
         known_contacts={c.lower() for c in (known_contacts or set())},
         prior_correspondents={c.lower() for c in (prior_correspondents or set())},
     )
@@ -178,5 +178,5 @@ __all__ = (
     "Rule",
     "VALID_RULE_TYPES",
     "build_rule",
-    "context_from_workbook",
+    "context_from_rules",
 )

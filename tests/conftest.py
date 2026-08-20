@@ -64,6 +64,25 @@ def _isolated_token_storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     get_settings.cache_clear()
 
 
+@pytest.fixture(autouse=True)
+def _isolated_rules_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test may read the real config/rules.toml — default to "file absent"
+    (an empty ruleset) unless a test points RULES_FILE at its own fixture."""
+    from app.rules import store as rules_store
+
+    monkeypatch.setattr(rules_store, "RULES_FILE", tmp_path / "rules.toml")
+
+
+@pytest.fixture(autouse=True)
+def _isolated_realtime_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test may touch the real oauth_tokens/realtime_cursor.json."""
+    from app.scheduling import state as state_module
+
+    monkeypatch.setattr(
+        state_module, "STATE_FILE", tmp_path / "oauth_tokens" / "realtime_cursor.json"
+    )
+
+
 @pytest.fixture
 def client() -> TestClient:
     from app.main import create_app

@@ -1,18 +1,16 @@
-# Render deployment definition. Wired for real use in Phase 16.
+# Render deployment definition.
 #
 # Plan: free. This is a personal, single-account project — the $7/month
 # Starter plan isn't needed. The trade-off: a free web service spins down
 # after 15 minutes with no incoming requests and takes about a minute to
-# wake back up, and while asleep the background loops (real-time mail
-# polling, the midnight digest scheduler) are asleep too. See
-# docs/plain-english/PHASE_16_RENDER_DEPLOYMENT.md for what that means in
-# practice and how to upgrade later if it stops being enough.
+# wake back up, and while asleep the background real-time mail poll loop is
+# asleep too.
 #
 # Free services also can't attach a persistent disk, so local files
 # (including the OAuth token file) don't survive a redeploy. That's handled
 # in code, not here: GOOGLE_OAUTH_SEED_REFRESH_TOKEN below is what makes the
 # Gmail connection survive a redeploy without a paid disk — see
-# app/gmail/tokens.py and the plain-English doc for the full explanation.
+# app/gmail/tokens.py.
 services:
   - type: web
     name: gmail-intelligence-agent
@@ -40,10 +38,6 @@ services:
         value: "false"
       - key: GMAIL_PROCESSING_ENABLED
         value: "true"
-      - key: DIGEST_TIMEZONE
-        value: America/New_York
-      - key: DIGEST_HOUR
-        value: "0"
       - key: AI_PROVIDER
         value: anthropic
       - key: REALTIME_ENABLED
@@ -61,23 +55,17 @@ services:
       - key: GOOGLE_CLIENT_SECRET
         sync: false
       # Render only assigns your service's onrender.com URL after the first
-      # deploy. Once you have it, set these two to
-      # https://<your-service>.onrender.com/oauth/callback and
-      # https://<your-service>.onrender.com/dashboard/auth/callback, and add
-      # both as authorized redirect URIs on the Google OAuth client.
+      # deploy. Once you have it, set this to
+      # https://<your-service>.onrender.com/oauth/callback and add it as an
+      # authorized redirect URI on the Google OAuth client.
       - key: GOOGLE_OAUTH_REDIRECT_URI
-        sync: false
-      - key: DASHBOARD_LOGIN_REDIRECT_URI
-        sync: false
-      - key: SHEETS_WORKBOOK_ID
         sync: false
       - key: SESSION_SECRET
         sync: false
       # Left blank on the very first deploy. After you connect Gmail once on
       # the live site, its callback page shows a refresh token to paste in
       # here — this is what keeps the connection alive across redeploys on a
-      # plan with no persistent disk. See
-      # docs/plain-english/PHASE_16_RENDER_DEPLOYMENT.md.
+      # plan with no persistent disk.
       - key: GOOGLE_OAUTH_SEED_REFRESH_TOKEN
         sync: false
       - key: GOOGLE_OAUTH_SEED_ACCOUNT_EMAIL

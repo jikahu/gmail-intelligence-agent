@@ -27,7 +27,7 @@
 
 ## What it can and cannot change in your Gmail
 
-- **Can, once the full gate is open:** the same things Phase 11 could — add or remove its own `AI/*` labels, move a message into or out of your Inbox, add the Important flag (never remove it automatically) — now applied automatically to new mail instead of only when you click a button.
+- **Can, once the full gate is open:** the same things Phase 11 could — add or remove its own `*` labels, move a message into or out of your Inbox, add the Important flag (never remove it automatically) — now applied automatically to new mail instead of only when you click a button.
 - **Cannot, ever:** send email, permanently delete anything, or trash a message automatically. Trash stays a manual, confirmed dashboard action — nothing here can move a message to Trash on its own.
 - **Will not touch older mail in a thread.** Fetching a whole thread is only to understand context correctly; it never means the app goes back and relabels older messages just because a new reply arrived. If you've already corrected an older message by hand, a new reply in that same thread won't fight your correction.
 - **Still requires you personally, twice over:** once to turn `REALTIME_ENABLED` on, and again (separately) to open the write gate. With the loop on but the gate closed, nothing in Gmail changes — the app only logs what it would have done.

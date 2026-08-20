@@ -108,11 +108,11 @@ def _addresses(raw: str) -> list[str]:
 
 @dataclass
 class Attachment:
-    """One attachment's metadata, plus whatever Phase 5 managed to read.
+    """One attachment's metadata, as Gmail reports it.
 
-    ``extracted_text`` stays empty unless the attachment layer has run and
-    succeeded. An empty value never means anything is wrong — see
-    :mod:`app.attachments.models` for why a failure has to be inert.
+    Attachment *contents* are never read or sent anywhere — only what Gmail's
+    own message payload already exposes (filename, mime type, size), which is
+    enough for the rules engine's document-shaped-attachment checks.
     """
 
     filename: str
@@ -122,9 +122,6 @@ class Attachment:
     attachment_id: str = ""
     #: Base64url payload, present when Gmail inlined a small attachment.
     inline_data: str = ""
-    #: Filled in by app.attachments once the file has been read.
-    extracted_text: str = ""
-    extraction_status: str = "not_attempted"
 
 
 @dataclass
@@ -188,15 +185,6 @@ class EmailMessage:
 
     def has_header(self, name: str) -> bool:
         return bool(self.headers.get(name.lower(), "").strip())
-
-    @property
-    def attachment_text(self) -> str:
-        """Text read out of attachments, lowercased. Empty until Phase 5 runs."""
-        return " ".join(
-            attachment.extracted_text
-            for attachment in self.attachments
-            if attachment.extracted_text
-        ).lower()
 
     @property
     def searchable_text(self) -> str:

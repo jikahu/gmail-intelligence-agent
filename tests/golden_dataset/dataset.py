@@ -19,7 +19,7 @@ check CLAUDE.md §15 asks the golden dataset to provide.
 
 from __future__ import annotations
 
-from app.acceptance.golden import GoldenExample, GoldenExpectation
+from app.classification.golden import GoldenExample, GoldenExpectation
 from app.classification.context import ClassificationContext
 from tests.fixtures.emails import bulk_headers, make_message, pdf, substack_headers
 
@@ -43,7 +43,7 @@ GOLDEN_EXAMPLES: tuple[GoldenExample, ...] = (
     _ex(
         "financial",
         GoldenExpectation(
-            expected_labels=frozenset({"AI/Financial"}),
+            expected_labels=frozenset({"Financial"}),
             expected_priority="P2",
             expect_review=False,
             expect_protected=True,
@@ -56,7 +56,7 @@ GOLDEN_EXAMPLES: tuple[GoldenExample, ...] = (
     _ex(
         "financial",
         GoldenExpectation(
-            expected_labels=frozenset({"AI/Financial", "AI/Action-Required"}),
+            expected_labels=frozenset({"Financial", "Action-Required"}),
             expected_priority="P1",
             expect_review=False,
             expect_protected=True,
@@ -70,7 +70,7 @@ GOLDEN_EXAMPLES: tuple[GoldenExample, ...] = (
     _ex(
         "security",
         GoldenExpectation(
-            expected_labels=frozenset({"AI/Security", "AI/Critical"}),
+            expected_labels=frozenset({"Security", "Critical"}),
             expected_priority="P1",
             expect_review=False,
             expect_protected=True,
@@ -97,7 +97,7 @@ GOLDEN_EXAMPLES: tuple[GoldenExample, ...] = (
     _ex(
         "personal",
         GoldenExpectation(
-            expected_labels=frozenset({"AI/Personal"}),
+            expected_labels=frozenset({"Personal"}),
             expected_priority="P3",
             expect_review=False,
             expect_protected=True,
@@ -111,7 +111,7 @@ GOLDEN_EXAMPLES: tuple[GoldenExample, ...] = (
     _ex(
         "work",
         GoldenExpectation(
-            expected_labels=frozenset({"AI/Work-Business"}),
+            expected_labels=frozenset({"Work-Business"}),
             expected_priority="P3",
             expect_review=False,
             expect_protected=False,
@@ -125,7 +125,7 @@ GOLDEN_EXAMPLES: tuple[GoldenExample, ...] = (
     _ex(
         "career",
         GoldenExpectation(
-            expected_labels=frozenset({"AI/Career"}),
+            expected_labels=frozenset({"Career"}),
             expected_priority="P2",
             expect_review=False,
             expect_protected=True,
@@ -139,7 +139,7 @@ GOLDEN_EXAMPLES: tuple[GoldenExample, ...] = (
     _ex(
         "receipts",
         GoldenExpectation(
-            expected_labels=frozenset({"AI/Purchases-Receipts"}),
+            expected_labels=frozenset({"Purchases-Receipts"}),
             expected_priority="P3",
             expect_review=False,
             expect_protected=True,
@@ -152,7 +152,7 @@ GOLDEN_EXAMPLES: tuple[GoldenExample, ...] = (
     _ex(
         "purchases",
         GoldenExpectation(
-            expected_labels=frozenset({"AI/Purchases-Receipts", "AI/Action-Required"}),
+            expected_labels=frozenset({"Purchases-Receipts", "Action-Required"}),
             expected_priority="P2",
             expect_review=False,
             expect_protected=True,
@@ -166,7 +166,7 @@ GOLDEN_EXAMPLES: tuple[GoldenExample, ...] = (
     _ex(
         "travel",
         GoldenExpectation(
-            expected_labels=frozenset({"AI/Purchases-Receipts"}),
+            expected_labels=frozenset({"Purchases-Receipts"}),
             expected_priority="P3",
             expect_review=False,
             expect_protected=True,
@@ -180,7 +180,7 @@ GOLDEN_EXAMPLES: tuple[GoldenExample, ...] = (
     _ex(
         "educational",
         GoldenExpectation(
-            expected_labels=frozenset({"AI/Education"}),
+            expected_labels=frozenset({"Education"}),
             expected_priority="P3",
             expect_review=False,
             expect_protected=True,
@@ -205,7 +205,7 @@ GOLDEN_EXAMPLES: tuple[GoldenExample, ...] = (
     _ex(
         "substack",
         GoldenExpectation(
-            expected_labels=frozenset({"AI/Newsletter"}),
+            expected_labels=frozenset({"Newsletter"}),
             expected_priority="P3",
             expect_review=False,
             expect_protected=True,
@@ -220,7 +220,7 @@ GOLDEN_EXAMPLES: tuple[GoldenExample, ...] = (
     _ex(
         "other_newsletters",
         GoldenExpectation(
-            expected_labels=frozenset({"AI/Newsletter"}),
+            expected_labels=frozenset({"Newsletter"}),
             expected_priority="P3",
             expect_review=True,
             expect_protected=False,
@@ -235,7 +235,7 @@ GOLDEN_EXAMPLES: tuple[GoldenExample, ...] = (
     _ex(
         "other_newsletters",
         GoldenExpectation(
-            expected_labels=frozenset({"AI/Newsletter"}),
+            expected_labels=frozenset({"Newsletter"}),
             expect_review=False,
             expect_protected=True,
             note="the user starring a message overrides an otherwise-Review-bound newsletter",
@@ -250,7 +250,7 @@ GOLDEN_EXAMPLES: tuple[GoldenExample, ...] = (
     _ex(
         "promotions",
         GoldenExpectation(
-            expected_labels=frozenset({"AI/Review", "AI/Low-Value"}),
+            expected_labels=frozenset({"Review", "Low-Value"}),
             expected_priority="P3",
             expect_review=True,
             expect_protected=False,
@@ -305,7 +305,7 @@ GOLDEN_EXAMPLES: tuple[GoldenExample, ...] = (
     _ex(
         "suspicious",
         GoldenExpectation(
-            expected_labels=frozenset({"AI/Suspicious", "AI/Review"}),
+            expected_labels=frozenset({"Suspicious", "Review"}),
             expect_review=True,
             expect_protected=False,
             note="high suspicion score: bad TLD, phishing wording, mismatched reply-to, urgency",
@@ -322,7 +322,7 @@ GOLDEN_EXAMPLES: tuple[GoldenExample, ...] = (
     _ex(
         "active_threads",
         GoldenExpectation(
-            expected_labels=frozenset({"AI/Personal"}),
+            expected_labels=frozenset({"Personal"}),
             expected_priority="P3",
             expect_review=False,
             expect_protected=True,
@@ -338,7 +338,7 @@ GOLDEN_EXAMPLES: tuple[GoldenExample, ...] = (
     _ex(
         "personal",
         GoldenExpectation(
-            expected_labels=frozenset({"AI/Personal"}),
+            expected_labels=frozenset({"Personal"}),
             expected_priority="P3",
             expect_review=False,
             expect_protected=True,
@@ -352,7 +352,7 @@ GOLDEN_EXAMPLES: tuple[GoldenExample, ...] = (
     _ex(
         "personal",
         GoldenExpectation(
-            expected_labels=frozenset({"AI/Personal"}),
+            expected_labels=frozenset({"Personal"}),
             expected_priority="P3",
             expect_review=False,
             expect_protected=True,
@@ -366,7 +366,7 @@ GOLDEN_EXAMPLES: tuple[GoldenExample, ...] = (
     _ex(
         "other_newsletters",
         GoldenExpectation(
-            expected_labels=frozenset({"AI/Review", "AI/Expired"}),
+            expected_labels=frozenset({"Review", "Expired"}),
             expect_review=True,
             expect_protected=False,
             note="expired promo code",
@@ -380,7 +380,7 @@ GOLDEN_EXAMPLES: tuple[GoldenExample, ...] = (
     _ex(
         "work",
         GoldenExpectation(
-            expected_labels=frozenset({"AI/Subscription-Review"}),
+            expected_labels=frozenset({"Subscription-Review"}),
             expected_priority="P2",
             expect_review=False,
             expect_protected=False,

@@ -75,16 +75,10 @@ def fake_gmail(monkeypatch: pytest.MonkeyPatch) -> FakeGmailClient:
 
 @pytest.fixture(autouse=True)
 def _no_live_google(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Never reach Contacts or Sheets from these tests."""
+    """Never reach Contacts from these tests."""
     monkeypatch.setattr(
         "app.gmail.people.get_client",
         lambda: (_ for _ in ()).throw(RuntimeError("contacts unavailable")),
-    )
-    monkeypatch.setattr(
-        "app.sheets.repository.ControlWorkbook.connect",
-        classmethod(lambda cls, spreadsheet_id=None: (_ for _ in ()).throw(
-            RuntimeError("workbook unavailable")
-        )),
     )
 
 
@@ -93,7 +87,7 @@ def _no_live_google(monkeypatch: pytest.MonkeyPatch) -> None:
 # --------------------------------------------------------------------
 
 
-def test_context_degrades_gracefully_without_contacts_or_workbook() -> None:
+def test_context_degrades_gracefully_without_contacts_or_a_rules_file() -> None:
     """A missing data source must thin the context, never break the run."""
     context = build_live_context(user_email=DEFAULT_USER)
 
@@ -104,7 +98,7 @@ def test_context_degrades_gracefully_without_contacts_or_workbook() -> None:
 
 def test_context_can_skip_both_sources() -> None:
     context = build_live_context(
-        include_contacts=False, include_workbook=False, user_email=DEFAULT_USER
+        include_contacts=False, include_rules=False, user_email=DEFAULT_USER
     )
 
     assert context.known_contacts == set()

@@ -71,8 +71,8 @@ def test_important_flag_propagates() -> None:
 def test_internal_labels_are_stripped_before_gmail() -> None:
     names = gmail_labels({Label.TRASH_CANDIDATE, Label.REVIEW})
 
-    assert names == ["AI/Review"]
-    assert "AI/Trash-Candidate" not in names
+    assert names == ["Review"]
+    assert "Trash-Candidate" not in names
 
 
 def test_priority_ordering() -> None:

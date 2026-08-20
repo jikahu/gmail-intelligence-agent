@@ -6,7 +6,7 @@ This is the phase where the app starts **making decisions**. Until now it could 
 
 What it produces for every email:
 
-- **A category** — one or more of the 18 labels, like `AI/Financial`, `AI/Personal`, `AI/Review`.
+- **A category** — one or more of the 18 labels, like `Financial`, `Personal`, `Review`.
 - **A priority** — P1 urgent, P2 important, or P3 normal.
 - **A proposed action** — keep it in the Inbox, archive it, or move it to the Review area.
 - **A reason, in plain words** — e.g. *"Kept because financial content ('account statement')."*
@@ -67,11 +67,11 @@ These are **actual outputs** from the engine, not hand-written illustrations:
 | Course material | P3 | Education | **Archive** | Kept because education content ('module'). |
 | Interview invite | P2 | Action-Required, Career | **Inbox** | Kept because career content ('interview invitation'). |
 | Advert with a PDF | P3 | none yet | **Left alone** | Kept because has an attachment (offer.pdf). |
-| Price increase notice | P2 | Newsletter | **Left alone** | Classified as AI/Newsletter at P2. |
+| Price increase notice | P2 | Newsletter | **Left alone** | Classified as Newsletter at P2. |
 
 A few of these are worth pointing out:
 
-- **"Archive" is not "delete".** A receipt gets filed into `AI/Purchases-Receipts` and leaves your Inbox, but it's still in your account and still searchable. Protection means it can't go to *Review* — it doesn't mean it stays in the Inbox.
+- **"Archive" is not "delete".** A receipt gets filed into `Purchases-Receipts` and leaves your Inbox, but it's still in your account and still searchable. Protection means it can't go to *Review* — it doesn't mean it stays in the Inbox.
 - **"Left alone" means exactly that** — the app has an opinion about what the email *is*, but no opinion about moving it, so it doesn't move.
 - **The advert with a PDF got no category.** Attachments are protected, so it can't be swept to Review, but the rules genuinely couldn't tell what it was. That's the honest answer, and it's flagged for Phase 4's AI to look at. Notice it *wasn't* labelled an important document just because a PDF was attached.
 - **Substack stays; other newsletters go to Review.** You can approve any other newsletter sender by adding a whitelist rule to the workbook, and it'll behave like Substack from then on.
@@ -84,7 +84,7 @@ Everything is driven by the Google Sheet from Phase 2. Add a row and the behavio
 |---|---|---|
 | `Sender_Rules` | `sender` = `news@site.com`, `rule_type` = `whitelist` | That sender is protected and stays in your Inbox |
 | `Sender_Rules` | `rule_type` = `blacklist` | That sender always goes to Review |
-| `Sender_Rules` | `rule_type` = `classify_as`, `action` = `AI/Financial` | Forces that category |
+| `Sender_Rules` | `rule_type` = `classify_as`, `action` = `Financial` | Forces that category |
 | `Domain_Rules` | `domain` = `chase.com`, `rule_type` = `whitelist` | Trusts the whole domain, including `alerts.chase.com` |
 | `VIPs` | `email` = `boss@work.com`, `status` = `approved` | Their mail always stays in your Inbox |
 

@@ -2,7 +2,7 @@
 
 Protection answers one narrow question: **may this email be routed to Review?**
 It does not decide where the message ends up. A protected receipt is still
-archived into ``AI/Purchases-Receipts`` — protection only means it can't be
+archived into ``Purchases-Receipts`` — protection only means it can't be
 swept into the Review queue as low-value.
 
 This is the single most safety-critical module in the app, because CLAUDE.md

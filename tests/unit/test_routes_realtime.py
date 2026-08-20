@@ -1,4 +1,4 @@
-"""Phase 13 routes: GET /realtime/status and POST /realtime/poll.
+"""Real-time processing routes: GET /realtime/status and POST /realtime/poll.
 
 Deep coverage of the poll cycle itself (thread fetch, idempotency, error
 isolation, the write gate) lives in test_scheduling_poller.py — these tests
@@ -11,10 +11,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from app.sheets.repository import ControlWorkbook
-from app.sheets.workbook import ensure_workbook
 from tests.fixtures.emails import DEFAULT_USER, gmail_message
-from tests.fixtures.fake_sheets import FakeDriveService, FakeSheetsService
 
 
 class FakeGmailClient:
@@ -35,7 +32,7 @@ class FakeGmailClient:
 
 @pytest.fixture
 def wired(monkeypatch: pytest.MonkeyPatch):
-    """A connected token plus a fake Gmail client and a real fake workbook."""
+    """A connected token plus a fake Gmail client."""
     from app.gmail.tokens import StoredToken, save_token
     from app.oauth_scopes import ACTIVE_SCOPES
 
@@ -47,16 +44,7 @@ def wired(monkeypatch: pytest.MonkeyPatch):
         "app.gmail.people.get_client",
         lambda: (_ for _ in ()).throw(RuntimeError("contacts unavailable")),
     )
-
-    sheets = FakeSheetsService()
-    drive = FakeDriveService()
-    info = ensure_workbook(sheets=sheets, drive=drive)
-    wb = ControlWorkbook(spreadsheet_id=info.spreadsheet_id, sheets=sheets)
-    monkeypatch.setattr(
-        "app.sheets.repository.ControlWorkbook.connect",
-        classmethod(lambda cls, spreadsheet_id=None: wb),
-    )
-    return gmail, wb
+    return gmail
 
 
 # --------------------------------------------------------------------
@@ -85,7 +73,6 @@ def test_poll_refuses_without_a_connected_account(client: TestClient) -> None:
 
 
 def test_poll_bootstraps_on_first_call(client: TestClient, wired) -> None:
-    gmail, wb = wired
     resp = client.post("/realtime/poll")
     assert resp.status_code == 200
     body = resp.json()
@@ -95,8 +82,10 @@ def test_poll_bootstraps_on_first_call(client: TestClient, wired) -> None:
 
 
 def test_poll_reports_nothing_new(client: TestClient, wired) -> None:
-    gmail, wb = wired
-    wb.settings.set("real_time_last_history_id", "100")
+    from app.scheduling import state as state_mod
+
+    gmail = wired
+    state_mod.save_cursor("100")
     gmail.history_pages = [{"history": [], "historyId": "150"}]
 
     resp = client.post("/realtime/poll")
@@ -109,8 +98,10 @@ def test_poll_reports_nothing_new(client: TestClient, wired) -> None:
 def test_poll_reports_a_proposal_when_the_write_gate_is_closed(
     client: TestClient, wired
 ) -> None:
-    gmail, wb = wired
-    wb.settings.set("real_time_last_history_id", "100")
+    from app.scheduling import state as state_mod
+
+    gmail = wired
+    state_mod.save_cursor("100")
     gmail.history_pages = [
         {
             "history": [{"messagesAdded": [{"message": {"id": "m1", "threadId": "t1"}}]}],

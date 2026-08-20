@@ -1,31 +1,29 @@
 """Turn a :class:`~app.classification.engine.Classification` into real Gmail
-API calls (Phase 11, CLAUDE.md §11 step 10 — "the rules engine decides,
-this module acts").
+API calls (CLAUDE.md §11 step 10 — "the rules engine decides, this module
+acts").
 
 Two ideas live here:
 
 * :func:`check_write_gate` — the single switch every write path in the app
-  must check first. All three of these must be true, or nothing is written:
-  ``DRY_RUN=false``, ``GMAIL_PROCESSING_ENABLED=true``, and the last 250-email
-  acceptance run recorded ``last_acceptance_passed=true`` in the control
-  workbook (CLAUDE.md §15 — this is the "concrete, checkable gate" the Phase
-  10 explainer promised, now actually enforced).
+  must check first. Both of these must be true, or nothing is written:
+  ``DRY_RUN=false`` and ``GMAIL_PROCESSING_ENABLED=true``.
 * :func:`plan_change` / :func:`apply_to_message` — compute the minimal label
   diff between what Gmail currently shows and what the classification wants,
   then issue exactly one ``messages.modify`` call for it. Idempotent: a
   message already in its desired state produces an empty plan and no API
-  call at all, which matters once Phase 13 starts re-running this on the same
-  mail repeatedly.
+  call at all, which matters since the real-time poller re-runs this on the
+  same mail repeatedly.
 
 What this module will never do, structurally:
 
 * Never marks Important, then removes it. Only ever adds ``IMPORTANT`` — an
   automated pass has no business taking away a signal a human or Gmail's own
   ML set (mirrors the AI layer's own "can raise, never lower" guarantee).
-* Never calls ``trash`` on its own. Trashing is a separate, explicit,
-  always-user-confirmed action (:mod:`app.dashboard.actions`) — the automatic
-  apply path only ever touches ``AI/*`` labels, ``INBOX``, and ``IMPORTANT``.
-* Never touches ``AI/Trash-Candidate`` — it isn't in ``gmail_label_names`` to
+* Never calls ``trash`` on its own. Trashing is never automatic — the
+  automatic apply path only ever touches the taxonomy's labels, ``INBOX``,
+  ``IMPORTANT``, and (additively only) an existing label the user already
+  made by hand (see :mod:`app.gmail.vendor_labels`).
+* Never touches ``Trash-Candidate`` — it isn't in ``gmail_label_names`` to
   begin with (CLAUDE.md §6: internal analytic concept only).
 """
 
@@ -34,12 +32,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.classification.engine import Classification
+from app.classification.labels import Label
 from app.classification.message import EmailMessage
 from app.config import get_settings
+from app.gmail.vendor_labels import match_existing_label
 from app.gmail.write_client import IMPORTANT_LABEL, INBOX_LABEL, GmailWriteClient
 from app.logging_config import get_logger
 
 log = get_logger("app.gmail.apply")
+
+#: Every label name the taxonomy itself might write to Gmail — used to tell
+#: "one of ours" apart from a label the user made by hand (CLAUDE.md §6).
+TAXONOMY_LABEL_NAMES: frozenset[str] = frozenset(label.value for label in Label)
 
 
 @dataclass(frozen=True)
@@ -54,7 +58,7 @@ class WriteGateStatus:
         return "; ".join(self.reasons)
 
 
-def check_write_gate(workbook) -> WriteGateStatus:
+def check_write_gate() -> WriteGateStatus:
     """The one function every Gmail-write code path must consult first."""
     settings = get_settings()
     reasons: list[str] = []
@@ -63,13 +67,6 @@ def check_write_gate(workbook) -> WriteGateStatus:
         reasons.append("DRY_RUN is true (dry-run mode) — set it to false to allow writes")
     if not settings.gmail_processing_enabled:
         reasons.append("GMAIL_PROCESSING_ENABLED is false")
-
-    passed = workbook.settings.get_bool("last_acceptance_passed", default=False)
-    if not passed:
-        reasons.append(
-            "the 250-email acceptance run (CLAUDE.md §15) hasn't recorded a "
-            "PASSED result yet — run POST /acceptance/run first"
-        )
 
     return WriteGateStatus(allowed=not reasons, reasons=tuple(reasons))
 
@@ -123,21 +120,30 @@ def plan_change(
     message: EmailMessage,
     classification: Classification,
     label_name_to_id: dict[str, str],
+    vendor_label_name: str | None = None,
 ) -> ChangePlan:
     """Compute the label diff, without calling Gmail.
 
-    ``label_name_to_id`` must already contain an entry for every ``AI/*``
+    ``label_name_to_id`` must already contain an entry for every taxonomy
     label the classification wants (see
     :meth:`GmailWriteClient.ensure_labels`) plus the two Gmail system labels
     this module touches, ``INBOX`` and ``IMPORTANT`` (whose id equals their
-    name, so callers may simply include them as self-mapped entries).
+    name, so callers may simply include them as self-mapped entries), and —
+    when given — ``vendor_label_name``, an existing label the user already
+    made by hand (:mod:`app.gmail.vendor_labels`).
     """
     current = set(message.label_ids)
-    current_ai_names = {name for name in current if name.startswith("AI/")}
+    current_ai_names = current & TAXONOMY_LABEL_NAMES
     desired_ai_names = set(classification.gmail_label_names)
 
     add_names = desired_ai_names - current_ai_names
     remove_names = current_ai_names - desired_ai_names
+
+    # A vendor-matched label is additive only, never removed by this app —
+    # it belongs to the user, not the taxonomy, so absence from a future
+    # classification must never be read as "take it away".
+    if vendor_label_name and vendor_label_name not in current:
+        add_names.add(vendor_label_name)
 
     # INBOX: only touched when the classification has an actual opinion.
     # "Neither keep nor archive" must leave the message exactly where it is.
@@ -178,12 +184,13 @@ def apply_to_message(
     message: EmailMessage,
     classification: Classification,
     label_name_to_id: dict[str, str],
+    vendor_label_name: str | None = None,
 ) -> AppliedChange:
     """Compute the plan and execute it as one ``modify`` call, if non-empty.
 
     Callers must have already confirmed :func:`check_write_gate` allows this.
     """
-    plan = plan_change(message, classification, label_name_to_id)
+    plan = plan_change(message, classification, label_name_to_id, vendor_label_name)
     labels_before = tuple(sorted(message.label_ids))
     inbox_before = INBOX_LABEL in message.label_ids
 
@@ -231,14 +238,23 @@ def apply_to_message(
 
 
 def label_name_map_for(
-    client: GmailWriteClient, classifications: list[Classification]
+    client: GmailWriteClient,
+    classifications: list[Classification],
+    vendor_label_names: set[str] | None = None,
 ) -> dict[str, str]:
-    """Resolve/create every ``AI/*`` label a batch of classifications needs,
-    plus the two system labels, in one label listing (see
-    :meth:`GmailWriteClient.ensure_labels`)."""
+    """Resolve/create every taxonomy label a batch of classifications needs,
+    plus the two system labels and any matched vendor labels, in one label
+    listing (see :meth:`GmailWriteClient.ensure_labels`).
+
+    Vendor labels always already exist by construction
+    (:func:`app.gmail.vendor_labels.match_existing_label` only ever returns a
+    name already present in Gmail), so including them here resolves their id
+    without ``ensure_labels`` ever creating anything new for them.
+    """
     names: set[str] = {INBOX_LABEL, IMPORTANT_LABEL}
     for classification in classifications:
         names.update(classification.gmail_label_names)
+    names.update(vendor_label_names or set())
     ensured = client.ensure_labels(sorted(names))
     # INBOX/IMPORTANT are system labels; their id is always their name.
     ensured.setdefault(INBOX_LABEL, INBOX_LABEL)
@@ -246,7 +262,14 @@ def label_name_map_for(
     return ensured
 
 
+def vendor_label_for(client: GmailWriteClient, message: EmailMessage) -> str | None:
+    """Look up an existing Gmail label the user already made that this
+    message's sender matches (see :mod:`app.gmail.vendor_labels`)."""
+    return match_existing_label(client.label_names(), message)
+
+
 __all__ = (
+    "TAXONOMY_LABEL_NAMES",
     "AppliedChange",
     "ChangePlan",
     "WriteGateStatus",
@@ -256,4 +279,5 @@ __all__ = (
     "fetch_current_labels",
     "label_name_map_for",
     "plan_change",
+    "vendor_label_for",
 )

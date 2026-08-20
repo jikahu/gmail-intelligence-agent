@@ -12,10 +12,7 @@ dependencies = [
     "pydantic>=2.9,<3.0",
     "pydantic-settings>=2.6,<3.0",
     "python-dotenv>=1.0,<2.0",
-    # Windows has no built-in IANA timezone database; tzdata provides it so
-    # zoneinfo.ZoneInfo("America/New_York") works everywhere.
-    "tzdata>=2024.2 ; sys_platform == 'win32'",
-    # Phase 1 — Google OAuth + Gmail/People read access.
+    # Google OAuth + Gmail/People read access.
     "google-auth>=2.35,<3.0",
     "google-auth-oauthlib>=1.2,<2.0",
     "google-api-python-client>=2.150,<3.0",
@@ -23,12 +20,6 @@ dependencies = [
     "cryptography>=43.0,<46.0",
     # Signed OAuth `state` value (CSRF protection).
     "itsdangerous>=2.2,<3.0",
-    # Phase 5 — attachment text extraction. Both are parsers, not runtimes:
-    # neither executes macros or embedded scripts.
-    "pypdf>=5.1,<7.0",
-    "python-docx>=1.1,<2.0",
-    # Phase 9 — parses the Review-queue action buttons' POST form bodies.
-    "python-multipart>=0.0.12,<1.0",
 ]
 
 [project.optional-dependencies]

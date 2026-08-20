@@ -17,29 +17,29 @@ def _fake_service(existing_labels: list[dict] | None = None) -> MagicMock:
 
 def test_ensure_labels_creates_only_the_missing_ones() -> None:
     service = _fake_service(
-        existing_labels=[{"name": "INBOX", "id": "INBOX"}, {"name": "AI/Review", "id": "Label_1"}]
+        existing_labels=[{"name": "INBOX", "id": "INBOX"}, {"name": "Review", "id": "Label_1"}]
     )
     create_call = service.users.return_value.labels.return_value.create
-    create_call.return_value.execute.return_value = {"id": "Label_2", "name": "AI/Financial"}
+    create_call.return_value.execute.return_value = {"id": "Label_2", "name": "Financial"}
 
     client = GmailWriteClient(service=service)
-    result = client.ensure_labels(["AI/Review", "AI/Financial"])
+    result = client.ensure_labels(["Review", "Financial"])
 
-    assert result == {"AI/Review": "Label_1", "AI/Financial": "Label_2"}
+    assert result == {"Review": "Label_1", "Financial": "Label_2"}
     # Only the missing label was created — one call, not two.
     assert create_call.call_count == 1
     kwargs = create_call.call_args.kwargs
-    assert kwargs["body"]["name"] == "AI/Financial"
+    assert kwargs["body"]["name"] == "Financial"
 
 
 def test_ensure_labels_lists_only_once_across_calls() -> None:
     """The label listing is cached for the client's lifetime — a batch apply
     over many messages must not re-list labels before every one."""
-    service = _fake_service(existing_labels=[{"name": "AI/Review", "id": "Label_1"}])
+    service = _fake_service(existing_labels=[{"name": "Review", "id": "Label_1"}])
     client = GmailWriteClient(service=service)
 
-    client.ensure_labels(["AI/Review"])
-    client.ensure_labels(["AI/Review"])
+    client.ensure_labels(["Review"])
+    client.ensure_labels(["Review"])
 
     list_call = service.users.return_value.labels.return_value.list
     assert list_call.call_count == 1
@@ -51,12 +51,12 @@ def test_modify_message_combines_add_and_remove_into_one_call() -> None:
     modify_call.return_value.execute.return_value = {"id": "m1", "labelIds": ["INBOX"]}
 
     client = GmailWriteClient(service=service)
-    client.modify_message("m1", add_label_ids=["INBOX", "Label_1"], remove_label_ids=["AI/Review"])
+    client.modify_message("m1", add_label_ids=["INBOX", "Label_1"], remove_label_ids=["Review"])
 
     assert modify_call.call_count == 1
     body = modify_call.call_args.kwargs["body"]
     assert set(body["addLabelIds"]) == {"INBOX", "Label_1"}
-    assert body["removeLabelIds"] == ["AI/Review"]
+    assert body["removeLabelIds"] == ["Review"]
 
 
 def test_trash_and_untrash_call_the_right_endpoints() -> None:
@@ -77,13 +77,13 @@ def test_trash_and_untrash_call_the_right_endpoints() -> None:
 def test_ensure_labels_sets_color_on_creation() -> None:
     service = _fake_service()
     create_call = service.users.return_value.labels.return_value.create
-    create_call.return_value.execute.return_value = {"id": "Label_1", "name": "AI/Critical"}
+    create_call.return_value.execute.return_value = {"id": "Label_1", "name": "Critical"}
 
     client = GmailWriteClient(service=service)
-    client.ensure_labels(["AI/Critical"])
+    client.ensure_labels(["Critical"])
 
     body = create_call.call_args.kwargs["body"]
-    assert body["color"] == LABEL_COLORS["AI/Critical"]
+    assert body["color"] == LABEL_COLORS["Critical"]
 
 
 def test_ensure_labels_omits_color_for_an_unmapped_name() -> None:

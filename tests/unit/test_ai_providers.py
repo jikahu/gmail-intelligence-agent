@@ -103,11 +103,6 @@ def test_null_provider_always_skips() -> None:
     assert not provider.summarize_email(message).was_called
 
 
-def test_attachment_analysis_is_stubbed_until_phase_5() -> None:
-    result = NullProvider().analyze_attachment("x.pdf", "some text")
-    assert "Phase 5" in (result.skipped_reason or "")
-
-
 # --------------------------------------------------------------------
 # Provider contract
 # --------------------------------------------------------------------
@@ -119,7 +114,7 @@ def test_providers_share_one_interface() -> None:
 
     for cls in (AnthropicProvider, OpenAIProvider, NullProvider, FakeProvider):
         assert issubclass(cls, AIProvider)
-        for method in ("classify_email", "summarize_email", "analyze_attachment"):
+        for method in ("classify_email", "summarize_email"):
             assert callable(getattr(cls, method))
 
 

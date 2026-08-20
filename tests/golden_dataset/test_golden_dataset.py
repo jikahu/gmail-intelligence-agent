@@ -1,17 +1,15 @@
-"""The golden dataset regression test (CLAUDE.md §15).
+"""The golden dataset regression test.
 
-The permanent, automated half of the launch quality gate: this dataset has
-known-correct answers, so it runs on every ``pytest`` pass — unlike the live
-250-email acceptance run, which needs a connected mailbox and is therefore
-user-triggered (see ``app/acceptance/``).
+A permanent, hand-labeled dataset with known-correct answers, so it runs on
+every ``pytest`` pass and catches a classifier regression before it ships.
 """
 
 from __future__ import annotations
 
-from app.acceptance.golden import evaluate
+from app.classification.golden import evaluate
 from tests.golden_dataset.dataset import GOLDEN_CONTEXT, GOLDEN_EXAMPLES
 
-#: The categories CLAUDE.md §15 names for the 250-email acceptance sample.
+#: The category spread this dataset is meant to cover.
 _NAMED_CATEGORIES = frozenset(
     {
         "financial", "security", "government", "personal", "work", "career",

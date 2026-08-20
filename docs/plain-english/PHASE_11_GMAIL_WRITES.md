@@ -6,7 +6,7 @@
 
 ## What was built
 
-1. **A real, write-capable connection to Gmail.** Up to now the app could only read your mail. It now has permission (once you reconnect and grant it) to add or remove its own `AI/*` labels, move a message in or out of your Inbox, mark something Important, and move a message to Gmail's own Trash. It still cannot send mail, and there is no button anywhere — not even a hidden one — that permanently deletes anything.
+1. **A real, write-capable connection to Gmail.** Up to now the app could only read your mail. It now has permission (once you reconnect and grant it) to add or remove its own `*` labels, move a message in or out of your Inbox, mark something Important, and move a message to Gmail's own Trash. It still cannot send mail, and there is no button anywhere — not even a hidden one — that permanently deletes anything.
 2. **A single safety switch three things must all agree on.** Before any real Gmail change happens, the app checks: is `DRY_RUN` turned off? Is `GMAIL_PROCESSING_ENABLED` turned on? And did your last 250-email acceptance run (Phase 10) actually pass? If any one of those three is "no," the app refuses — with a plain-English reason — instead of silently doing nothing or guessing.
 3. **A small, manual way to try it.** A new endpoint, `POST /gmail/apply`, works like Phase 10's acceptance run: point it at a handful of real messages, and by default it only shows you what it *would* do. Only when you explicitly add `confirm=true` — and only if the safety switch above agrees — does it actually change anything in Gmail.
 4. **Two Command Center buttons that now really work.** "Restore to Inbox" and "Trash" were placeholders since Phase 8. Restore now really moves a message back to your Inbox. Trash now really moves a message to Gmail's Trash — but only after a second, separate confirmation screen that names the exact message and reminds you it's recoverable, not deleted. The other five buttons (Keep, Review Correct, Make Sender Rule, Make Domain Rule, Suggest VIP) are unchanged — they still only write to your control spreadsheet.
@@ -26,8 +26,8 @@
 
 ## What it can and cannot change in your Gmail
 
-- **Can:** add or remove its own `AI/*` labels, move a message into or out of your Inbox, add the Important flag (never remove it automatically), move a message to Gmail's Trash.
-- **Cannot, ever:** send email, permanently delete anything, or touch any label that isn't one of its own `AI/*` labels, `INBOX`, or `IMPORTANT`.
+- **Can:** add or remove its own `*` labels, move a message into or out of your Inbox, add the Important flag (never remove it automatically), move a message to Gmail's Trash.
+- **Cannot, ever:** send email, permanently delete anything, or touch any label that isn't one of its own `*` labels, `INBOX`, or `IMPORTANT`.
 - **Still requires you personally:** every Trash action requires you to click through a page that names the exact message first. Nothing is ever trashed from a single click, and nothing is ever trashed automatically by the classifier.
 
 ## What happens when it runs

@@ -5,7 +5,7 @@ Deliberately a *separate* class from :class:`app.gmail.client.GmailReadClient`
 mutation. Everything that can change Gmail lives here instead, behind the
 ``gmail.modify`` scope (CLAUDE.md §5):
 
-* Add/remove ``AI/*`` labels (creating them in Gmail on first use).
+* Add/remove the taxonomy's labels (creating them in Gmail on first use).
 * Archive (remove ``INBOX``) / restore to Inbox (add ``INBOX``).
 * Mark Important (add ``IMPORTANT``) — never unmark it automatically; taking
   away a signal the user or Gmail's own ML set is not this app's call to make.
@@ -44,9 +44,9 @@ IMPORTANT_LABEL = "IMPORTANT"
 #: ``untrash_message`` change it, via Gmail's own API behavior.
 TRASH_LABEL = "TRASH"
 
-#: One (background, text) color per ``AI/*`` label, so the taxonomy is
-#: visually distinguishable in Gmail's sidebar and message list -- not just a
-#: wall of same-colored tags. Both values must come from Gmail's own fixed
+#: One (background, text) color per taxonomy label, so it's visually
+#: distinguishable in Gmail's sidebar and message list -- not just a wall of
+#: same-colored tags. Both values must come from Gmail's own fixed
 #: palette (``users.labels`` API's ``LabelColor`` schema); arbitrary hex
 #: values are rejected with a 400. Colors group loosely by urgency/meaning:
 #: red/orange for things needing attention, blue for people/work, green for
@@ -66,7 +66,6 @@ LABEL_COLORS: dict[str, dict[str, str]] = {
     Label.CAREER.value: {"backgroundColor": "#3c78d8", "textColor": "#ffffff"},
     Label.SUSPICIOUS.value: {"backgroundColor": "#822111", "textColor": "#ffffff"},
     Label.IMPORTANT_DOCUMENT.value: {"backgroundColor": "#285bac", "textColor": "#ffffff"},
-    Label.WAITING_FOR_REPLY.value: {"backgroundColor": "#eaa041", "textColor": "#000000"},
     Label.SUBSCRIPTION_REVIEW.value: {"backgroundColor": "#8e63ce", "textColor": "#ffffff"},
     Label.EXPIRED.value: {"backgroundColor": "#666666", "textColor": "#ffffff"},
 }
@@ -96,10 +95,18 @@ class GmailWriteClient:
             }
         return self._label_ids
 
+    def label_names(self) -> set[str]:
+        """Every label name that already exists in Gmail -- including ones
+        the user made by hand. Used by
+        :func:`app.gmail.vendor_labels.match_existing_label` to recognize a
+        folder like "Uber" the user already has, without ever creating one.
+        """
+        return set(self._load_labels())
+
     def ensure_labels(self, names: list[str]) -> dict[str, str]:
         """Return ``{name: label_id}`` for every name, creating any that are
         missing in Gmail. Gmail treats ``/`` in a label name as a nested-label
-        separator on its own — creating ``AI/Financial`` directly is enough,
+        separator on its own — creating ``Parent/Child`` directly is enough,
         no separate parent-label step is needed.
 
         A newly created label gets its :data:`LABEL_COLORS` entry immediately,
@@ -128,7 +135,7 @@ class GmailWriteClient:
         return {name: known[name] for name in names}
 
     def sync_label_colors(self) -> dict[str, str]:
-        """Apply :data:`LABEL_COLORS` to every already-existing ``AI/*``
+        """Apply :data:`LABEL_COLORS` to every already-existing taxonomy
         label, for labels created before a color was assigned (or before this
         method existed at all). Returns ``{label_name: outcome}`` for
         reporting; never creates a label that doesn't already exist --

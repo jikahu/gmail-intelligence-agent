@@ -72,12 +72,6 @@ def _no_live_google(monkeypatch: pytest.MonkeyPatch) -> None:
         "app.gmail.people.get_client",
         lambda: (_ for _ in ()).throw(RuntimeError("contacts unavailable")),
     )
-    monkeypatch.setattr(
-        "app.sheets.repository.ControlWorkbook.connect",
-        classmethod(lambda cls, spreadsheet_id=None: (_ for _ in ()).throw(
-            RuntimeError("workbook unavailable")
-        )),
-    )
 
 
 # --------------------------------------------------------------------

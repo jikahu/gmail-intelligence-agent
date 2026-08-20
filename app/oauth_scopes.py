@@ -1,9 +1,8 @@
 """Combined, currently-active OAuth scope set.
 
 This is the single source of truth for "what does the app currently ask Google
-for". Every phase that adds a new scope registers it in its domain-specific
-scopes module (e.g. ``app.gmail.scopes``, ``app.sheets.scopes``) and this file
-aggregates them into ``ACTIVE_SCOPES``.
+for". :mod:`app.gmail.scopes` registers every scope this app requests, and
+this file re-exports the currently-active subset as ``ACTIVE_SCOPES``.
 
 The rules in CLAUDE.md §16 require:
 
@@ -20,7 +19,6 @@ from __future__ import annotations
 from typing import Mapping
 
 from app.gmail import scopes as gmail_scopes
-from app.sheets import scopes as sheets_scopes
 
 
 def _dedupe(items: tuple[str, ...]) -> tuple[str, ...]:
@@ -45,16 +43,12 @@ def _dedupe(items: tuple[str, ...]) -> tuple[str, ...]:
 ACTIVE_SCOPES: tuple[str, ...] = _dedupe(
     (
         *gmail_scopes.PHASE_1_SCOPES,
-        *sheets_scopes.PHASE_2_SCOPES,
         *gmail_scopes.PHASE_11_SCOPES,
     )
 )
 
 #: Merged description dict.
-SCOPE_DESCRIPTIONS: Mapping[str, str] = {
-    **gmail_scopes.SCOPE_DESCRIPTIONS,
-    **sheets_scopes.SCOPE_DESCRIPTIONS,
-}
+SCOPE_DESCRIPTIONS: Mapping[str, str] = {**gmail_scopes.SCOPE_DESCRIPTIONS}
 
 
 def describe(scopes: tuple[str, ...] = ACTIVE_SCOPES) -> list[tuple[str, str]]:

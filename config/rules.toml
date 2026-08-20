@@ -1,0 +1,34 @@
+# Personal rules for the Gmail agent.
+#
+# This replaces the old Google Sheets control workbook. Edit this file
+# directly, or ask Claude Code to add a rule for you -- either way, changes
+# take effect the next time the app restarts or the real-time poller reads
+# its context (it re-reads this file on every classification run, so a
+# redeploy or restart is enough, no cache to bust).
+#
+# rule_type is one of:
+#   whitelist   -- never route mail from this sender/domain to Review
+#   blacklist   -- always treat mail from this sender/domain as a Review
+#                  candidate (still subject to hard-protection topics like
+#                  banking, security, etc. -- a blacklist rule cannot force
+#                  a genuinely protected email into Review)
+#   classify_as -- force a specific label (set `action` to the label name,
+#                  e.g. "Financial" -- see app/classification/labels.py for
+#                  the full list)
+#
+# Domain rules on public mail providers (gmail.com, outlook.com, ...) are
+# silently ignored -- approving one person at gmail.com must never trust
+# every Gmail address on earth.
+
+# [[vips]]
+# email = "someone@example.com"
+
+# [[sender_rules]]
+# sender = "billing@some-company.com"
+# rule_type = "whitelist"
+# action = ""
+
+# [[domain_rules]]
+# domain = "chase.com"
+# rule_type = "whitelist"
+# action = ""

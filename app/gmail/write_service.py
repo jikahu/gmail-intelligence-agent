@@ -1,22 +1,16 @@
-"""Manually-triggered real Gmail writes over a small batch of recent mail
-(Phase 11).
+"""Manually-triggered real Gmail writes over a small batch of recent mail.
 
-This is the bounded, testable counterpart to Phase 10's acceptance run: it
-runs the exact same read-only classification pipeline as ``/classify/preview``
-over up to ``limit`` messages, then — only if ``confirm=True`` *and*
-:func:`app.gmail.apply.check_write_gate` allows it — actually applies each
-message's decision to Gmail and logs a real ``Audit_Log`` row for every one
-that changed.
+This runs the exact same read-only classification pipeline as
+``/classify/preview`` over up to ``limit`` messages, then — only if
+``confirm=True`` *and* :func:`app.gmail.apply.check_write_gate` allows it —
+actually applies each message's decision to Gmail.
 
 ``confirm=False`` (the default) always behaves as a preview, regardless of
 settings, the same "see it before you do it" shape as every other write-
 adjacent endpoint in this app. Continuous, unattended processing of new mail
-is Phase 13's job, not this module's — this is a tool for trying Phase 11 on
-a few real messages under the user's direct control, not a scheduler.
-
-A confirmed run that changes anything also writes one ``System_Runs`` row
-with ``undo_available=True`` (Phase 12: :mod:`app.undo.service` is what
-reads it back to find "the last run" to reverse).
+is the real-time poller's job (:mod:`app.scheduling.poller`), not this
+module's — this is a tool for trying a write on a few real messages under the
+user's direct control, not a scheduler.
 """
 
 from __future__ import annotations
@@ -87,24 +81,16 @@ def apply_recent(
     confirm: bool = False,
     use_ai: bool = False,
     include_contacts: bool = True,
-    include_workbook: bool = True,
-    read_attachments: bool = True,
+    include_rules: bool = True,
 ) -> ApplyReport:
     """Classify up to ``limit`` recent messages and, if confirmed and
     allowed, apply the result to Gmail for real. Raises ``NotConnectedError``
-    (via the pipeline / workbook connect calls) the same way every other
-    Gmail-backed endpoint does.
+    the same way every other Gmail-backed endpoint does.
     """
-    from datetime import datetime, timezone
-
-    from app.audit import service as audit_service
     from app.classification import pipeline
     from app.gmail.write_client import IMPORTANT_LABEL, INBOX_LABEL, get_write_client
-    from app.sheets.repository import ControlWorkbook
 
-    started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    workbook = ControlWorkbook.connect()
-    gate = gmail_apply.check_write_gate(workbook)
+    gate = gmail_apply.check_write_gate()
     will_write = confirm and gate.allowed
 
     results = pipeline.preview_recent(
@@ -112,14 +98,20 @@ def apply_recent(
         query=query,
         use_ai=use_ai,
         include_contacts=include_contacts,
-        include_workbook=include_workbook,
-        read_attachments=read_attachments,
+        include_rules=include_rules,
     )
 
+    vendor_labels: dict[str, str | None] = {}
     if will_write:
         client = get_write_client()
+        for r in results:
+            vendor_labels[r.message.message_id] = gmail_apply.vendor_label_for(
+                client, r.message
+            )
         label_map = gmail_apply.label_name_map_for(
-            client, [r.classification for r in results]
+            client,
+            [r.classification for r in results],
+            vendor_label_names={v for v in vendor_labels.values() if v},
         )
     else:
         # Preview only — no Gmail call needed to know *what* would change,
@@ -130,15 +122,16 @@ def apply_recent(
             names.update(r.classification.gmail_label_names)
         label_map = {name: name for name in names}
 
-    run_id = audit_service.new_run_id() if will_write else ""
-    audit_rows: list[dict[str, str]] = []
     message_results: list[AppliedMessageResult] = []
     changed_count = 0
 
     for r in results:
         message, decision = r.message, r.classification
+        vendor_label_name = vendor_labels.get(message.message_id)
         if will_write:
-            change = gmail_apply.apply_to_message(client, message, decision, label_map)
+            change = gmail_apply.apply_to_message(
+                client, message, decision, label_map, vendor_label_name
+            )
             would_change = change.changed
         else:
             plan = gmail_apply.plan_change(message, decision, label_map)
@@ -156,17 +149,6 @@ def apply_recent(
 
         if change.changed:
             changed_count += 1
-            audit_rows.append(
-                audit_service.event_from_applied_change(
-                    change,
-                    subject=message.subject,
-                    classification=", ".join(decision.gmail_label_names) or "(none)",
-                    priority=decision.priority.value,
-                    confidence=decision.confidence,
-                    reason=decision.rationale,
-                    run_id=run_id,
-                ).as_row()
-            )
 
         message_results.append(
             AppliedMessageResult(
@@ -181,21 +163,6 @@ def apply_recent(
                 labels_before=list(change.labels_before),
                 labels_after=list(change.labels_after),
             )
-        )
-
-    if audit_rows:
-        workbook.audit_log.record_many(audit_rows)
-
-    if will_write:
-        workbook.system_runs.record(
-            run_id=run_id,
-            mode="live",
-            started_at=started_at,
-            completed_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            emails_processed=len(results),
-            emails_changed=changed_count,
-            errors=0,
-            undo_available=changed_count > 0,
         )
 
     log.info(

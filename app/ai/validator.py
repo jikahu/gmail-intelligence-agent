@@ -52,8 +52,8 @@ DEFAULT_REVIEW_THRESHOLD = 0.7
 
 #: Labels the AI may never apply directly.
 #:
-#: ``AI/Trash-Candidate`` is internal-only and must never reach Gmail (§6).
-#: ``AI/Review`` and ``AI/Low-Value`` are *consequences* of the Review decision,
+#: ``Trash-Candidate`` is internal-only and must never reach Gmail (§6).
+#: ``Review`` and ``Low-Value`` are *consequences* of the Review decision,
 #: not categories the AI gets to assert — otherwise a vetoed Review would still
 #: leave the message labelled "Review" while sitting in the Inbox. The AI asks
 #: for Review through ``review_reason``; whether it gets it is decided below.
@@ -234,7 +234,7 @@ def _accept_review(
         review, reason = True, suggestion.review_reason or "the AI judged this low value"
         accepted.append("AI proposed Review")
     elif not review and low_confidence and not base.labels:
-        # CLAUDE.md §11: when uncertain → AI/Review, protection rules still apply.
+        # CLAUDE.md §11: when uncertain → Review, protection rules still apply.
         review = True
         reason = (
             f"neither the rules nor the AI could classify this confidently "

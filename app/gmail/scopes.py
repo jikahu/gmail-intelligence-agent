@@ -53,7 +53,7 @@ GMAIL_WRITE_SCOPES: tuple[str, ...] = (
 #: required" banner already handle prompting for that).
 PHASE_11_SCOPES: tuple[str, ...] = (*GMAIL_WRITE_SCOPES,)
 
-#: Set/change a label's color (the ``AI/*`` label color-coding feature).
+#: Set/change a label's color (the taxonomy label color-coding feature).
 #: Confirmed empirically, not from the docs: Gmail's discovery document lists
 #: ``gmail.modify`` as an accepted scope for ``labels.create``/``labels.patch``,
 #: but in practice a token with only ``gmail.modify`` gets a real 403
@@ -87,7 +87,7 @@ SCOPE_DESCRIPTIONS: Mapping[str, str] = {
         "mail or permanently deleting anything."
     ),
     "https://www.googleapis.com/auth/gmail.labels": (
-        "Set the color of the AI/* labels this app creates, so they're "
+        "Set the color of the taxonomy labels this app creates, so they're "
         "visually distinct in your inbox. Does not grant reading, sending, "
         "or deleting messages."
     ),

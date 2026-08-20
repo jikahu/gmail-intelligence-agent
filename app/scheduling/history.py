@@ -29,7 +29,7 @@ log = get_logger("app.scheduling.history")
 #: Only new messages trigger processing (CLAUDE.md §13's "new-email
 #: triggering"). Deliberately excludes labelAdded/labelRemoved: reacting to
 #: label changes would mean reacting to this app's *own* prior writes (an
-#: added AI/* label is itself a labelAdded history record) — plan_change's
+#: added taxonomy label is itself a labelAdded history record) — plan_change's
 #: idempotency would keep that harmless, but there is no reason to pay for
 #: the extra fetch/classify cycle on every one of this app's own actions.
 HISTORY_TYPES = ["messageAdded"]

@@ -2,15 +2,15 @@
 
 Two ideas live here:
 
-* :class:`Label` — the 18 ``AI/*`` labels. More than one can apply to a single
-  email; the taxonomy is deliberately not single-label.
+* :class:`Label` — the 17 labels. More than one can apply to a single email;
+  the taxonomy is deliberately not single-label.
 * :class:`LabelPolicy` — what each label *wants* to happen to the message in
   Gmail. The engine combines the policies of every applied label with
   :func:`combine_policies`, which always resolves conflicts in the safer
   direction: **if any label wants the message left in the Inbox, it stays.**
 
-Nothing here talks to Gmail. These are intentions; Phase 11 is what acts on
-them.
+Nothing here talks to Gmail. These are intentions; :mod:`app.gmail.apply` is
+what acts on them.
 """
 
 from __future__ import annotations
@@ -38,26 +38,30 @@ def most_urgent(*priorities: Priority) -> Priority:
 
 
 class Label(str, Enum):
-    """The ``AI/*`` label set. Values are the literal Gmail label names."""
+    """The label taxonomy. Values are the literal Gmail label names.
 
-    CRITICAL = "AI/Critical"
-    ACTION_REQUIRED = "AI/Action-Required"
-    PERSONAL = "AI/Personal"
-    WORK_BUSINESS = "AI/Work-Business"
-    PURCHASES_RECEIPTS = "AI/Purchases-Receipts"
-    NEWSLETTER = "AI/Newsletter"
-    LOW_VALUE = "AI/Low-Value"
-    TRASH_CANDIDATE = "AI/Trash-Candidate"
-    REVIEW = "AI/Review"
-    EDUCATION = "AI/Education"
-    SECURITY = "AI/Security"
-    FINANCIAL = "AI/Financial"
-    CAREER = "AI/Career"
-    SUSPICIOUS = "AI/Suspicious"
-    IMPORTANT_DOCUMENT = "AI/Important-Document"
-    WAITING_FOR_REPLY = "AI/Waiting-For-Reply"
-    SUBSCRIPTION_REVIEW = "AI/Subscription-Review"
-    EXPIRED = "AI/Expired"
+    These used to be namespaced under ``AI/`` (``AI/Critical``, ``AI/Review``,
+    ...). That prefix is gone -- the labels now sit at the top level of the
+    Gmail label list, alongside any folders the user already made by hand.
+    """
+
+    CRITICAL = "Critical"
+    ACTION_REQUIRED = "Action-Required"
+    PERSONAL = "Personal"
+    WORK_BUSINESS = "Work-Business"
+    PURCHASES_RECEIPTS = "Purchases-Receipts"
+    NEWSLETTER = "Newsletter"
+    LOW_VALUE = "Low-Value"
+    TRASH_CANDIDATE = "Trash-Candidate"
+    REVIEW = "Review"
+    EDUCATION = "Education"
+    SECURITY = "Security"
+    FINANCIAL = "Financial"
+    CAREER = "Career"
+    SUSPICIOUS = "Suspicious"
+    IMPORTANT_DOCUMENT = "Important-Document"
+    SUBSCRIPTION_REVIEW = "Subscription-Review"
+    EXPIRED = "Expired"
 
 
 @dataclass(frozen=True)
@@ -111,14 +115,13 @@ LABEL_POLICIES: dict[Label, LabelPolicy] = {
     Label.CAREER: LabelPolicy(keep_in_inbox=True),
     Label.SUSPICIOUS: LabelPolicy(
         archive=True,
-        note="Always paired with AI/Review. Links and attachments are never opened.",
+        note="Always paired with Review. Links and attachments are never opened.",
     ),
     Label.IMPORTANT_DOCUMENT: LabelPolicy(
         note="Preserve the original message and its attachment."
     ),
-    Label.WAITING_FOR_REPLY: LabelPolicy(keep_in_inbox=True),
     Label.SUBSCRIPTION_REVIEW: LabelPolicy(note="Never auto-cancels anything."),
-    Label.EXPIRED: LabelPolicy(archive=True, note="Paired with AI/Review."),
+    Label.EXPIRED: LabelPolicy(archive=True, note="Paired with Review."),
 }
 
 #: Labels that mean "this email matters" — used by the Review veto and by the
@@ -156,7 +159,7 @@ def combine_policies(labels: set[Label]) -> CombinedPolicy:
 
     The tie-break rule is the whole point: *keeping an email visible beats
     tidying it away* (CLAUDE.md §21). So a message labelled both
-    ``AI/Purchases-Receipts`` (archive) and ``AI/Action-Required`` (inbox)
+    ``Purchases-Receipts`` (archive) and ``Action-Required`` (inbox)
     stays in the Inbox.
     """
     policies = [LABEL_POLICIES[label] for label in labels]
@@ -172,7 +175,7 @@ def combine_policies(labels: set[Label]) -> CombinedPolicy:
 def gmail_labels(labels: set[Label]) -> list[str]:
     """Return the label names that may actually be written to Gmail, sorted.
 
-    Filters out internal-only concepts such as ``AI/Trash-Candidate``.
+    Filters out internal-only concepts such as ``Trash-Candidate``.
     """
     return sorted(
         label.value for label in labels if LABEL_POLICIES[label].applied_to_gmail

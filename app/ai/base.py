@@ -111,19 +111,6 @@ class AIProvider(ABC):
     def summarize_email(self, message: EmailMessage) -> AIResult:
         """Return a one-line summary. Never raises."""
 
-    def analyze_attachment(
-        self, filename: str, extracted_text: str
-    ) -> AIResult:  # pragma: no cover - Phase 5
-        """Summarize an already-extracted attachment.
-
-        Phase 5 does the extraction; this signature exists now so the interface
-        is stable. Attachment *bytes* are never sent — only text that the
-        attachment layer has already safely extracted.
-        """
-        return AIResult.skipped(
-            self.name, self.model, "attachment analysis arrives in Phase 5"
-        )
-
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"{type(self).__name__}(model={self.model!r})"
 

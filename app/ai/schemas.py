@@ -87,8 +87,11 @@ class AISuggestion(BaseModel):
                 continue
             name = str(item).strip()
             match = _LABELS_BY_LOWER.get(name.lower())
-            if match is None and not name.lower().startswith("ai/"):
-                match = _LABELS_BY_LOWER.get(f"ai/{name.lower()}")
+            if match is None and name.lower().startswith("ai/"):
+                # Tolerate an old-style "AI/" prefix the model might still
+                # produce out of habit -- the taxonomy dropped it, but a
+                # stray prefix shouldn't cost a label the AI clearly meant.
+                match = _LABELS_BY_LOWER.get(name.lower()[len("ai/"):])
             if match is not None and match not in kept:
                 kept.append(match)
         return kept[:MAX_LABELS]

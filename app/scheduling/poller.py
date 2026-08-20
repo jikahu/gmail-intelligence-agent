@@ -5,29 +5,21 @@ counterpart to :mod:`app.gmail.write_service`, which is the manual,
 user-triggered version of the same "classify, then maybe apply" shape; both
 ultimately go through the same :mod:`app.gmail.apply` gate and diff logic.
 
-**Thread-aware classification.** Every other read-only entry point in this
-app (``/classify/preview``, the acceptance run, the dashboard) classifies
-messages fetched individually, so ``EmailMessage.thread_message_count`` /
-``user_in_thread`` default to "just this one message" — a known, documented
-gap since Phase 7 ("full-thread pulls come with the dashboard/real-time
-phases"). This module is that phase: a new message's *whole* thread is
-fetched in one call (:meth:`app.gmail.client.GmailReadClient.get_thread_full`)
-so CLAUDE.md §8's "active email conversations" protection sees the real
-thread state, not a single message in isolation.
+**Thread-aware classification.** A new message's *whole* thread is fetched in
+one call (:meth:`app.gmail.client.GmailReadClient.get_thread_full`) so
+CLAUDE.md §8's "active email conversations" protection sees the real thread
+state, not a single message in isolation.
 
 **Only new messages are reclassified, never the rest of the thread.** Fetching
 the whole thread is for *context* only — it does not mean every older message
-in that thread gets reprocessed and potentially re-labelled. An explicit user
-correction on an older message (Restore, Make Sender Rule, ...) must not be
-silently fought by the next reply arriving in the same thread (CLAUDE.md §11:
-explicit user decisions outrank behavioral inference).
+in that thread gets reprocessed and potentially re-labelled.
 
 **Idempotent by construction.** :func:`app.gmail.apply.plan_change` computes
 an empty plan for a message already in its desired state, so reprocessing the
 same message twice (a retried cycle, an overlapping history page) writes
-nothing and logs nothing the second time. "Avoid endless reclassification"
-follows from that plus the history cursor only ever moving forward — Gmail
-never hands this app the same history record twice.
+nothing the second time. "Avoid endless reclassification" follows from that
+plus the history cursor only ever moving forward — Gmail never hands this app
+the same history record twice.
 
 **Failures are per-message, not per-cycle.** One bad thread fetch or one
 failed ``modify`` call is logged and skipped; it never aborts the rest of the
@@ -40,30 +32,21 @@ once, not endlessly.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 
-from app.audit import service as audit_service
 from app.classification.engine import classify
 from app.classification.message import EmailMessage, from_gmail_thread
 from app.gmail import apply as gmail_apply
 from app.logging_config import get_logger
 from app.scheduling import history as history_mod
+from app.scheduling import state as state_mod
 from app.scheduling.retry import call_with_retry
 
 log = get_logger("app.scheduling.poller")
 
-#: The Settings key the mailbox's last-seen history id is stored under. Lives
-#: in the control workbook, not env config — it is per-connected-account
-#: operational state, the same reason ``last_acceptance_passed`` lives there.
-HISTORY_CURSOR_KEY = "real_time_last_history_id"
-
-RUN_MODE = "real_time"
-
 
 @dataclass(frozen=True)
 class ProcessedMessage:
-    """One message's outcome for this cycle — for the JSON report only; the
-    durable record is the Audit_Log rows written alongside it."""
+    """One message's outcome for this cycle."""
 
     message_id: str
     thread_id: str
@@ -76,8 +59,8 @@ class ProcessedMessage:
 
 @dataclass(frozen=True)
 class PollReport:
-    #: True when this was the very first poll for this workbook — nothing
-    #: was processed, only the starting cursor was recorded.
+    #: True when this was the very first poll — nothing was processed, only
+    #: the starting cursor was recorded.
     bootstrapped: bool
     #: True when the stored cursor had expired and had to be reset to "now" —
     #: mail from the gap was not seen by this scan.
@@ -115,23 +98,18 @@ class PollReport:
         }
 
 
-def _bootstrap(workbook, gmail, gate) -> PollReport:
-    """First-ever poll for this workbook: record "now" as the starting point
-    without processing anything.
+def _bootstrap(gmail, gate) -> PollReport:
+    """First-ever poll: record "now" as the starting point without
+    processing anything.
 
     Deliberately conservative — the same reason every other automatic
-    behavior in this app defaults closed until turned on — so switching real-
-    time processing on for the first time never sweeps through however many
-    messages already happen to be sitting in the mailbox. A deliberate
-    one-time catch-up is ``/gmail/apply`` or ``/acceptance/run``'s job; a full
-    12-month sweep is the future Phase 15's.
+    behavior in this app defaults closed until turned on — so switching
+    real-time processing on for the first time never sweeps through however
+    many messages already happen to be sitting in the mailbox. A deliberate
+    one-time catch-up is ``/gmail/apply``'s job.
     """
     baseline = history_mod.current_history_id(gmail)
-    workbook.settings.set(
-        HISTORY_CURSOR_KEY,
-        baseline,
-        description="Real-time poller's last-seen Gmail history id.",
-    )
+    state_mod.save_cursor(baseline)
     log.info("realtime_poll_bootstrapped", extra={"history_id": baseline})
     return PollReport(
         bootstrapped=True,
@@ -153,7 +131,7 @@ def _thread_messages(gmail, user_email: str, thread_id: str) -> list[EmailMessag
     return from_gmail_thread(raw_thread, user_email=user_email)
 
 
-def run_poll_cycle(workbook=None, use_ai: bool = True) -> PollReport:
+def run_poll_cycle(use_ai: bool = True) -> PollReport:
     """Run exactly one poll cycle.
 
     Safe to call on a timer (:mod:`app.scheduling.service`) or by hand
@@ -164,26 +142,19 @@ def run_poll_cycle(workbook=None, use_ai: bool = True) -> PollReport:
     """
     from app.ai import assist, build_provider
     from app.ai.costs import CostTracker
-    from app.classification.pipeline import PreviewResult, build_live_context
+    from app.classification.pipeline import build_live_context
     from app.gmail.client import get_client as get_gmail_client
     from app.gmail.write_client import get_write_client
-    from app.sheets.repository import ControlWorkbook
 
-    started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    workbook = workbook or ControlWorkbook.connect()
     gmail = get_gmail_client()
-    gate = gmail_apply.check_write_gate(workbook)
+    gate = gmail_apply.check_write_gate()
 
-    cursor = workbook.settings.get(HISTORY_CURSOR_KEY)
+    cursor = state_mod.load_cursor()
     if not cursor:
-        return _bootstrap(workbook, gmail, gate)
+        return _bootstrap(gmail, gate)
 
     scan = history_mod.scan_for_changes(gmail, cursor)
-    workbook.settings.set(
-        HISTORY_CURSOR_KEY,
-        scan.new_history_id,
-        description="Real-time poller's last-seen Gmail history id.",
-    )
+    state_mod.save_cursor(scan.new_history_id)
 
     if not scan.messages:
         return PollReport(
@@ -199,7 +170,7 @@ def run_poll_cycle(workbook=None, use_ai: bool = True) -> PollReport:
 
     profile = gmail.get_profile()
     user_email = str(profile.get("emailAddress") or "").lower()
-    context = build_live_context(user_email=user_email, workbook=workbook)
+    context = build_live_context(user_email=user_email)
 
     provider = build_provider() if use_ai else None
     tracker = CostTracker()
@@ -211,8 +182,6 @@ def run_poll_cycle(workbook=None, use_ai: bool = True) -> PollReport:
     for changed in scan.messages:
         by_thread.setdefault(changed.thread_id, []).append(changed.message_id)
 
-    run_id = audit_service.new_run_id()
-    audit_rows: list[dict[str, str]] = []
     processed: list[ProcessedMessage] = []
     changed_count = 0
     error_count = 0
@@ -268,28 +237,21 @@ def run_poll_cycle(workbook=None, use_ai: bool = True) -> PollReport:
 
             try:
                 if gate.allowed:
-                    label_map = gmail_apply.label_name_map_for(write_client, [decision])
+                    vendor_label_name = gmail_apply.vendor_label_for(write_client, message)
+                    label_map = gmail_apply.label_name_map_for(
+                        write_client,
+                        [decision],
+                        vendor_label_names={vendor_label_name} if vendor_label_name else set(),
+                    )
 
                     def _apply() -> gmail_apply.AppliedChange:
                         return gmail_apply.apply_to_message(
-                            write_client, message, decision, label_map
+                            write_client, message, decision, label_map, vendor_label_name
                         )
 
                     change = call_with_retry(_apply, description="messages.modify")
                     if change.changed:
                         changed_count += 1
-                        audit_rows.append(
-                            audit_service.event_from_applied_change(
-                                change,
-                                subject=message.subject,
-                                classification=", ".join(decision.gmail_label_names)
-                                or "(none)",
-                                priority=decision.priority.value,
-                                confidence=decision.confidence,
-                                reason=decision.rationale,
-                                run_id=run_id,
-                            ).as_row()
-                        )
                     processed.append(
                         ProcessedMessage(
                             message_id=message_id,
@@ -301,16 +263,9 @@ def run_poll_cycle(workbook=None, use_ai: bool = True) -> PollReport:
                         )
                     )
                 else:
-                    # Gate closed: still classify and log a proposal, the same
-                    # dry-run shape /audit/scan already uses, so the user can
-                    # see what real-time processing *would* do before turning
-                    # live writes on.
-                    audit_rows.append(
-                        audit_service.event_from_result(
-                            PreviewResult(message=message, classification=decision),
-                            run_id=run_id,
-                        ).as_row()
-                    )
+                    # Gate closed: still classify, so /realtime/status can
+                    # show what real-time processing *would* do before
+                    # turning live writes on.
                     processed.append(
                         ProcessedMessage(
                             message_id=message_id,
@@ -335,25 +290,9 @@ def run_poll_cycle(workbook=None, use_ai: bool = True) -> PollReport:
                     )
                 )
 
-    if audit_rows:
-        workbook.audit_log.record_many(audit_rows)
-
-    if gate.allowed:
-        workbook.system_runs.record(
-            run_id=run_id,
-            mode=RUN_MODE,
-            started_at=started_at,
-            completed_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            emails_processed=len(processed),
-            emails_changed=changed_count,
-            errors=error_count,
-            undo_available=changed_count > 0,
-        )
-
     log.info(
         "realtime_poll_cycle_completed",
         extra={
-            "run_id": run_id,
             "messages_seen": len(scan.messages),
             "messages_processed": len(processed),
             "changed_count": changed_count,
@@ -376,4 +315,4 @@ def run_poll_cycle(workbook=None, use_ai: bool = True) -> PollReport:
     )
 
 
-__all__ = ("HISTORY_CURSOR_KEY", "PollReport", "ProcessedMessage", "run_poll_cycle")
+__all__ = ("PollReport", "ProcessedMessage", "run_poll_cycle")

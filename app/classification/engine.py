@@ -66,7 +66,7 @@ _DOCUMENT_MIME_TYPES: frozenset[str] = frozenset(
 _DOCUMENT_EXTENSIONS: tuple[str, ...] = (".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv")
 
 #: Labels that answer "what kind of email is this?". Modifier labels such as
-#: AI/Subscription-Review and AI/Important-Document are deliberately excluded.
+#: Subscription-Review and Important-Document are deliberately excluded.
 _CATEGORY_LABELS: frozenset[Label] = frozenset(
     {
         Label.SECURITY,
@@ -129,14 +129,18 @@ class Classification:
 
 
 def _label_from_action(action: str) -> Label | None:
-    """Turn a rule's ``action`` cell into a Label, tolerating loose spelling."""
-    candidate = (action or "").strip()
+    """Turn a rule's ``action`` cell into a Label, tolerating loose spelling
+    and a stray old-style ``AI/`` prefix (the taxonomy dropped it, but a rule
+    copied over from an earlier config shouldn't silently stop working)."""
+    candidate = (action or "").strip().lower()
+    if candidate.startswith("ai/"):
+        candidate = candidate[len("ai/"):]
     if not candidate:
         return None
     for label in Label:
-        if candidate.lower() in (label.value.lower(), label.name.lower()):
+        if candidate in (label.value.lower(), label.name.lower()):
             return label
-    log.warning("rule_action_not_a_label", extra={"rule_action": candidate})
+    log.warning("rule_action_not_a_label", extra={"rule_action": action})
     return None
 
 
@@ -173,63 +177,51 @@ def _assign_categories(
 
     if "security" in topics or "fraud" in topics:
         labels.update({Label.SECURITY, Label.CRITICAL})
-        triggered.append("security content → AI/Security + AI/Critical")
+        triggered.append("security content → Security + Critical")
 
     if "fraud" in topics:
         labels.update({Label.FINANCIAL, Label.ACTION_REQUIRED})
-        triggered.append("fraud indicators → AI/Financial + AI/Action-Required")
+        triggered.append("fraud indicators → Financial + Action-Required")
 
     if "financial" in topics:
         labels.add(Label.FINANCIAL)
-        triggered.append("financial content → AI/Financial")
+        triggered.append("financial content → Financial")
 
     if "purchase" in topics or "delivery" in topics:
         labels.add(Label.PURCHASES_RECEIPTS)
-        triggered.append("order/delivery content → AI/Purchases-Receipts")
+        triggered.append("order/delivery content → Purchases-Receipts")
 
     if "travel" in topics:
         labels.add(Label.PURCHASES_RECEIPTS)
-        triggered.append("travel booking → AI/Purchases-Receipts (grouped in Phase 6)")
+        triggered.append("travel booking → Purchases-Receipts")
 
     if "education" in topics:
         labels.add(Label.EDUCATION)
-        triggered.append("genuine educational content → AI/Education")
+        triggered.append("genuine educational content → Education")
 
     if "career" in topics:
         labels.add(Label.CAREER)
-        triggered.append("career content → AI/Career")
+        triggered.append("career content → Career")
 
     # An attachment always *protects* a message (§8), but that alone doesn't
     # make it a long-term record — a promotional PDF is still an advert. The
-    # label needs positive evidence, and since Phase 5 that evidence can come
-    # from what the file actually says rather than just what it's called.
+    # label needs positive evidence: a document-shaped attachment (by mime
+    # type or filename) plus some other topic already matched, or subject
+    # wording that says so directly.
     document_attached = any(
         attachment.mime_type in _DOCUMENT_MIME_TYPES
         or attachment.filename.lower().endswith(_DOCUMENT_EXTENSIONS)
         for attachment in message.attachments
     )
-    attachment_text = message.attachment_text
-    contents_look_like_a_record = bool(attachment_text) and (
-        patterns.IMPORTANT_DOCUMENT.matches(attachment_text)
-        or patterns.FINANCIAL.matches(attachment_text)
-        or patterns.LEGAL_GOVERNMENT.matches(attachment_text)
-        or patterns.INSURANCE.matches(attachment_text)
-    )
-    if (
-        patterns.IMPORTANT_DOCUMENT.matches(headline)
-        or (document_attached and (topics - {"attachment"}))
-        or (document_attached and contents_look_like_a_record)
+    if patterns.IMPORTANT_DOCUMENT.matches(headline) or (
+        document_attached and (topics - {"attachment"})
     ):
         labels.add(Label.IMPORTANT_DOCUMENT)
-        triggered.append(
-            "attachment contents look like a long-term record → AI/Important-Document"
-            if contents_look_like_a_record
-            else "long-term record → AI/Important-Document"
-        )
+        triggered.append("long-term record → Important-Document")
 
     if patterns.SUBSCRIPTION.matches(headline):
         labels.add(Label.SUBSCRIPTION_REVIEW)
-        triggered.append("subscription or renewal → AI/Subscription-Review")
+        triggered.append("subscription or renewal → Subscription-Review")
 
     # Only label it a newsletter if nothing more specific applied. Bank
     # statements, receipts and booking confirmations routinely carry the same
@@ -241,14 +233,14 @@ def _assign_categories(
     ):
         labels.add(Label.NEWSLETTER)
         triggered.append(
-            "Substack newsletter → AI/Newsletter"
+            "Substack newsletter → Newsletter"
             if signals.is_substack
-            else "newsletter list headers → AI/Newsletter"
+            else "newsletter list headers → Newsletter"
         )
 
     if signals.is_suspicious:
         labels.update({Label.SUSPICIOUS, Label.REVIEW})
-        triggered.append("phishing indicators → AI/Suspicious + AI/Review")
+        triggered.append("phishing indicators → Suspicious + Review")
 
     # Fallback: nothing categorical matched.
     if not labels:
@@ -262,10 +254,10 @@ def _assign_categories(
         # "check out this sale" is still a personal email.
         if personal_ish and not signals.is_bulk:
             labels.add(Label.PERSONAL)
-            triggered.append("known correspondent, written individually → AI/Personal")
+            triggered.append("known correspondent, written individually → Personal")
         elif not signals.is_mass_mail and not signals.is_automated_sender:
             labels.add(Label.WORK_BUSINESS)
-            triggered.append("individually-addressed mail → AI/Work-Business")
+            triggered.append("individually-addressed mail → Work-Business")
 
 
 def _detect_action_required(
@@ -286,11 +278,11 @@ def _detect_action_required(
     )
 
     if phrase:
-        triggered.append(f"action wording ({phrase!r}) → AI/Action-Required")
+        triggered.append(f"action wording ({phrase!r}) → Action-Required")
     if payment_problem:
-        triggered.append("payment problem → AI/Action-Required")
+        triggered.append("payment problem → Action-Required")
     if delivery_problem:
-        triggered.append("delivery problem → AI/Action-Required")
+        triggered.append("delivery problem → Action-Required")
 
     required = bool(phrase or payment_problem or delivery_problem)
     if required:
@@ -634,7 +626,7 @@ def _assert_safety_invariants(
     if Label.TRASH_CANDIDATE in classification.labels:
         if Label.TRASH_CANDIDATE.value in classification.gmail_label_names:
             raise AssertionError(
-                "Safety violation: AI/Trash-Candidate must never reach Gmail."
+                "Safety violation: Trash-Candidate must never reach Gmail."
             )
     if classification.review and classification.keep_in_inbox:
         raise AssertionError(

@@ -21,8 +21,8 @@ from app.classification.engine import Classification
 from app.classification.labels import Label
 from app.classification.message import EmailMessage
 
-#: Bump on every prompt edit. Recorded in the audit trail.
-PROMPT_VERSION = "v1.2026-08-17"
+#: Bump on every prompt edit.
+PROMPT_VERSION = "v2.2026-08-20"
 
 
 SYSTEM_INSTRUCTIONS = """\
@@ -82,7 +82,7 @@ Guidance on specific kinds of mail:
     the person has approved that sender.
   - Promotions, cold sales outreach, social network notices, surveys, and
     "we miss you" nudges are low value.
-  - Phishing indicators mean AI/Suspicious: a sender domain that doesn't match
+  - Phishing indicators mean Suspicious: a sender domain that doesn't match
     who the message claims to be from, urgent pressure combined with a request
     for credentials or payment, or a link that doesn't go where it says.
 

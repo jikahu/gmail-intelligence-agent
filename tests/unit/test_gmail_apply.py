@@ -16,25 +16,6 @@ from app.gmail import apply as gmail_apply
 from tests.fixtures.emails import make_message
 
 
-class _FakeSettingsRepo:
-    def __init__(self, values: dict[str, str]) -> None:
-        self._values = values
-
-    def get_bool(self, key: str, default: bool) -> bool:
-        raw = self._values.get(key)
-        if raw is None:
-            return default
-        return raw.strip().lower() in {"true", "yes", "1"}
-
-
-class _FakeWorkbook:
-    def __init__(self, last_acceptance_passed: bool | None = None) -> None:
-        values = {}
-        if last_acceptance_passed is not None:
-            values["last_acceptance_passed"] = "true" if last_acceptance_passed else "false"
-        self.settings = _FakeSettingsRepo(values)
-
-
 # --------------------------------------------------------------------
 # check_write_gate
 # --------------------------------------------------------------------
@@ -44,7 +25,7 @@ def test_gate_closed_by_default_dry_run(monkeypatch: pytest.MonkeyPatch) -> None
     from app.config import get_settings
 
     get_settings.cache_clear()
-    status = gmail_apply.check_write_gate(_FakeWorkbook(last_acceptance_passed=True))
+    status = gmail_apply.check_write_gate()
     assert status.allowed is False
     assert any("DRY_RUN" in r for r in status.reasons)
 
@@ -55,33 +36,18 @@ def test_gate_closed_when_processing_disabled(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv("DRY_RUN", "false")
     monkeypatch.setenv("GMAIL_PROCESSING_ENABLED", "false")
     get_settings.cache_clear()
-    status = gmail_apply.check_write_gate(_FakeWorkbook(last_acceptance_passed=True))
+    status = gmail_apply.check_write_gate()
     assert status.allowed is False
     assert any("GMAIL_PROCESSING_ENABLED" in r for r in status.reasons)
 
 
-def test_gate_closed_when_acceptance_has_not_passed(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gate_open_when_both_conditions_hold(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.config import get_settings
 
     monkeypatch.setenv("DRY_RUN", "false")
     monkeypatch.setenv("GMAIL_PROCESSING_ENABLED", "true")
     get_settings.cache_clear()
-    status = gmail_apply.check_write_gate(_FakeWorkbook(last_acceptance_passed=False))
-    assert status.allowed is False
-    assert any("acceptance" in r for r in status.reasons)
-
-    # Also refused when the flag has simply never been set.
-    status_unset = gmail_apply.check_write_gate(_FakeWorkbook())
-    assert status_unset.allowed is False
-
-
-def test_gate_open_only_when_all_three_conditions_hold(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.config import get_settings
-
-    monkeypatch.setenv("DRY_RUN", "false")
-    monkeypatch.setenv("GMAIL_PROCESSING_ENABLED", "true")
-    get_settings.cache_clear()
-    status = gmail_apply.check_write_gate(_FakeWorkbook(last_acceptance_passed=True))
+    status = gmail_apply.check_write_gate()
     assert status.allowed is True
     assert status.reasons == ()
 
@@ -91,7 +57,7 @@ def test_gate_open_only_when_all_three_conditions_hold(monkeypatch: pytest.Monke
 # --------------------------------------------------------------------
 
 
-#: Every AI/* label mapped to a synthetic id, plus the two system labels —
+#: Every taxonomy label mapped to a synthetic id, plus the two system labels —
 #: plan_change never needs a real Gmail connection to compute a diff.
 _LABEL_MAP = {"INBOX": "INBOX", "IMPORTANT": "IMPORTANT"} | {
     label.value: f"Label_{i}" for i, label in enumerate(Label)
@@ -99,7 +65,7 @@ _LABEL_MAP = {"INBOX": "INBOX", "IMPORTANT": "IMPORTANT"} | {
 
 
 def test_plan_is_empty_when_already_in_the_desired_state() -> None:
-    message = make_message(labels=["INBOX", "AI/Financial"])
+    message = make_message(labels=["INBOX", "Financial"])
     decision = Classification(
         labels={Label.FINANCIAL}, keep_in_inbox=True, archive=False, mark_important=False
     )
@@ -108,17 +74,17 @@ def test_plan_is_empty_when_already_in_the_desired_state() -> None:
 
 
 def test_plan_adds_missing_ai_label_and_inbox() -> None:
-    message = make_message(labels=["AI/Review"])  # not currently in Inbox
+    message = make_message(labels=["Review"])  # not currently in Inbox
     decision = Classification(
         labels={Label.FINANCIAL}, keep_in_inbox=True, archive=False, mark_important=False
     )
     plan = gmail_apply.plan_change(message, decision, _LABEL_MAP)
-    assert set(plan.add_label_names) == {"AI/Financial", "INBOX"}
-    assert "AI/Review" in plan.remove_label_names  # no longer wanted
+    assert set(plan.add_label_names) == {"Financial", "INBOX"}
+    assert "Review" in plan.remove_label_names  # no longer wanted
 
 
 def test_plan_removes_inbox_only_when_classification_wants_archive() -> None:
-    message = make_message(labels=["INBOX", "AI/Review"])
+    message = make_message(labels=["INBOX", "Review"])
     decision = Classification(
         labels={Label.REVIEW}, keep_in_inbox=False, archive=True, mark_important=False
     )
@@ -129,7 +95,7 @@ def test_plan_removes_inbox_only_when_classification_wants_archive() -> None:
 def test_plan_leaves_inbox_alone_when_classification_has_no_opinion() -> None:
     """keep_in_inbox=False and archive=False together mean 'no opinion' —
     CLAUDE.md: that must never be read as 'archive it'."""
-    message = make_message(labels=["INBOX", "AI/Newsletter"])
+    message = make_message(labels=["INBOX", "Newsletter"])
     decision = Classification(
         labels={Label.NEWSLETTER}, keep_in_inbox=False, archive=False, mark_important=False
     )
@@ -159,7 +125,7 @@ def test_plan_never_removes_important_automatically() -> None:
 
 
 def test_plan_never_touches_trash_candidate() -> None:
-    """AI/Trash-Candidate is internal-only (CLAUDE.md §6) — it must never
+    """Trash-Candidate is internal-only (CLAUDE.md §6) — it must never
     appear as a Gmail label to add, even when the engine assigned it."""
     message = make_message(labels=["INBOX"])
     decision = Classification(
@@ -169,7 +135,7 @@ def test_plan_never_touches_trash_candidate() -> None:
         mark_important=False,
     )
     plan = gmail_apply.plan_change(message, decision, _LABEL_MAP)
-    assert "AI/Trash-Candidate" not in plan.add_label_names
+    assert "Trash-Candidate" not in plan.add_label_names
 
 
 # --------------------------------------------------------------------
@@ -178,7 +144,7 @@ def test_plan_never_touches_trash_candidate() -> None:
 
 
 def test_apply_to_message_skips_the_api_call_when_plan_is_empty() -> None:
-    message = make_message(labels=["INBOX", "AI/Financial"])
+    message = make_message(labels=["INBOX", "Financial"])
     decision = Classification(
         labels={Label.FINANCIAL}, keep_in_inbox=True, archive=False, mark_important=False
     )
@@ -189,18 +155,18 @@ def test_apply_to_message_skips_the_api_call_when_plan_is_empty() -> None:
 
 
 def test_apply_to_message_issues_exactly_one_modify_call() -> None:
-    message = make_message(labels=["AI/Review"])
+    message = make_message(labels=["Review"])
     decision = Classification(
         labels={Label.FINANCIAL}, keep_in_inbox=True, archive=False, mark_important=False
     )
     client = MagicMock()
     client.modify_message.return_value = {
         "id": message.message_id,
-        "labelIds": ["INBOX", "AI/Financial"],
+        "labelIds": ["INBOX", "Financial"],
     }
     change = gmail_apply.apply_to_message(client, message, decision, _LABEL_MAP)
 
     assert client.modify_message.call_count == 1
     assert change.changed is True
-    assert change.labels_after == ("AI/Financial", "INBOX")
+    assert change.labels_after == ("Financial", "INBOX")
     assert change.inbox_after is True
