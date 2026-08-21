@@ -2,16 +2,15 @@
 
 There is no in-process background loop anymore — that used to mean an
 asyncio task ticking every ``REALTIME_POLL_INTERVAL_SECONDS`` forever, which
-only works while the process itself stays resident. On a host that sleeps
-after a period of no traffic (e.g. Render's free plan), a loop like that
-just stops running along with the rest of the process, silently.
-
-Instead, something *outside* this process — a cron job, a scheduled HTTP
-ping, Windows Task Scheduler — is expected to call ``POST /realtime/poll``
-on a timer. That request is what wakes a sleeping host back up, so the
-"loop" and the "keep the host awake" problem solve each other instead of
-fighting. This module just remembers what happened the last few times that
-endpoint was hit, so ``GET /realtime/status`` has something honest to show.
+only works while the process itself stays resident. There is no resident
+process at all now: ``.github/workflows/realtime-poll.yml`` starts a fresh
+process (``python -m app.scheduling``) on a GitHub Actions cron tick, it runs
+exactly one cycle, and it exits. This module just remembers what happened
+the last few times ``/realtime/poll`` was hit *when running as a local/manual
+FastAPI process* — ``GET /realtime/status`` has something honest to show for
+that path, but it does not see the CLI runs the scheduled workflow actually
+makes, since each of those is a separate short-lived process with nothing to
+report back to.
 """
 
 from __future__ import annotations

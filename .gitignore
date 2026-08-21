@@ -7,7 +7,12 @@
 credentials.json
 token.json
 client_secret*.json
-oauth_tokens/
+# The encrypted OAuth token never touches git. The Gmail history cursor is
+# just a number (not sensitive — see app/scheduling/state.py) and IS
+# committed by .github/workflows/realtime-poll.yml so it survives between
+# runs on GitHub's disposable runners.
+oauth_tokens/*
+!oauth_tokens/realtime_cursor.json
 
 # Python
 __pycache__/

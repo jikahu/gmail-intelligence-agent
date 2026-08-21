@@ -70,7 +70,7 @@ def _allow_insecure_transport_for_local_dev(redirect_uri: str, app_env: str) -> 
     ``google-auth-oauthlib`` refuses to exchange a code unless the redirect
     URI is HTTPS, even for ``localhost``. That's the right default, so this
     only relaxes it for a non-production app running against ``http://`` —
-    Render/production always uses HTTPS, so this is a no-op there.
+    a production redirect URI is always HTTPS, so this is a no-op there.
     """
     if app_env != "production" and redirect_uri.startswith("http://"):
         os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")

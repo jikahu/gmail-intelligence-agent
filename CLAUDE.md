@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-Source of truth for a personal Gmail intelligence agent. One Gmail account. Classifies with deterministic rules first, AI second. Keeps important email visible; routes low-value or uncertain email to a **Review** area (never auto-deletes). Applies its labels alongside any folders the user already made by hand (e.g. an existing "Uber" label catches Uber receipts). Processes new mail in near real time. Config, VIPs, and sender/domain rules live in a single checked-in file (`config/rules.toml`) that the user (or Claude Code, on their behalf) edits directly. Runs on Render. AI layer is provider-agnostic (Anthropic Claude or OpenAI).
+Source of truth for a personal Gmail intelligence agent. One Gmail account. Classifies with deterministic rules first, AI second. Keeps important email visible; routes low-value or uncertain email to a **Review** area (never auto-deletes). Applies its labels alongside any folders the user already made by hand (e.g. an existing "Uber" label catches Uber receipts). Processes new mail in near real time. Config, VIPs, and sender/domain rules live in a single checked-in file (`config/rules.toml`) that the user (or Claude Code, on their behalf) edits directly. Runs entirely inside a GitHub Actions cron workflow — no hosted server. AI layer is provider-agnostic (Anthropic Claude or OpenAI).
 
 There is **no dashboard, no Google Sheets control workbook, no daily digest email, no audit trail, no attachment text extraction, no deadline/money/subscription/travel intelligence, and no 12-month historical sweep.** Those all existed in an earlier, much larger version of this project and were deliberately removed — see §14. What's left is small on purpose: read the inbox, decide, label it.
 
@@ -20,11 +20,11 @@ Prefer small, testable changes; keep the project runnable at every step. Run tes
 
 ## 3. Technology Stack
 
-- **App:** Python 3.13, FastAPI. No HTML dashboard, no template engine — the few HTML pages that exist (`/`, OAuth callback) are tiny inline strings. Everything else is JSON.
+- **App:** Python 3.13, FastAPI. No HTML dashboard, no template engine — the few HTML pages that exist (`/`, OAuth callback) are tiny inline strings. Everything else is JSON. FastAPI is used for local/manual use (`/classify/preview`, `/gmail/apply`, the one-time OAuth consent flow) — it is not hosted anywhere for ongoing operation; see Hosting below.
 - **Email:** Gmail API + Google OAuth 2.0. Prefer push/real-time notifications; falls back to polling (the current implementation).
 - **AI:** Provider abstraction supporting Anthropic Claude and OpenAI. No vendor SDK calls scattered through the codebase — only `app/ai/anthropic_provider.py` and `app/ai/openai_provider.py` import a vendor SDK.
-- **Storage:** None beyond two small local files: the encrypted OAuth token (`oauth_tokens/token.json.enc`) and the real-time poller's Gmail history cursor (`oauth_tokens/realtime_cursor.json`). User-editable config lives in the checked-in `config/rules.toml`. There is no database and no external control-plane service.
-- **Hosting:** GitHub → Render, secrets in env vars.
+- **Storage:** None beyond two small local files: the encrypted OAuth token (`oauth_tokens/token.json.enc`, re-seeded each run from the `GOOGLE_OAUTH_SEED_REFRESH_TOKEN` secret — never committed) and the real-time poller's Gmail history cursor (`oauth_tokens/realtime_cursor.json`, committed back to the repo by the poll workflow so it survives between runs — a Gmail history id isn't sensitive). User-editable config lives in the checked-in `config/rules.toml`. There is no database and no external control-plane service.
+- **Hosting:** None. `.github/workflows/realtime-poll.yml` runs `python -m app.scheduling` directly on a GitHub Actions runner every 10 minutes — checkout, install, run one poll cycle, commit the moved cursor, done. No server process runs between ticks. Secrets live in GitHub repo secrets (Settings → Secrets and variables → Actions).
 
 Conceptual AI interface:
 
@@ -42,7 +42,7 @@ Cost order: (1) hard rules, (2) metadata heuristics, (3) light AI for ambiguity.
 
 ```
 gmail-agent/
-├── CLAUDE.md  README.md  pyproject.toml  .env.example  .gitignore  render.yaml
+├── CLAUDE.md  README.md  pyproject.toml  .env.example  .gitignore
 ├── config/rules.toml              # VIPs, sender rules, domain rules — user-edited
 ├── app/
 │   ├── main.py                    # FastAPI routes
@@ -179,7 +179,7 @@ A missing or unparsable file degrades to an empty ruleset rather than failing �
 
 **Manual apply.** `POST /gmail/apply` classifies up to `limit` recent messages and, only with `confirm=true` and the write gate open, applies the result for real.
 
-**Real-time processing.** No background loop runs inside the app — `POST /realtime/poll` runs exactly one cycle (find mail new since the last check, classify each message with full thread context, apply if the write gate allows) whenever it's called. Something outside the process is expected to call it on a timer; `.github/workflows/realtime-poll.yml` does that every 10 minutes against the deployed app. Idempotent, retries transient failures, never lets one bad message stop the cycle.
+**Real-time processing.** No background loop, no server. `python -m app.scheduling` (same code as `POST /realtime/poll`, for local/manual use) runs exactly one cycle — find mail new since the last check, classify each message with full thread context, apply if the write gate allows — then exits. `.github/workflows/realtime-poll.yml` runs that directly on a GitHub Actions runner every 10 minutes: checkout, install, run, commit the moved history cursor back to the repo. Idempotent, retries transient failures, never lets one bad message stop the cycle.
 
 **No dashboard, no digest, no audit trail, no Undo.** The `/classify/preview` and `/gmail/apply` (with `confirm=false`, the default) responses are the only place to see what the agent thinks before it acts. There is nothing to review after the fact beyond Gmail's own label state and this app's logs.
 

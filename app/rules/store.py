@@ -4,9 +4,9 @@ This is the single file that replaces the Sheets workbook's ``VIPs``,
 ``Sender_Rules``, and ``Domain_Rules`` tabs. It's read-only from the app's
 side: there is no dashboard, no approval-workflow UI, and no code path that
 writes to it. The user edits it by hand (or asks Claude Code to), commits
-it like any other config, and it ships with the app on every deploy --
-which also means it survives a Render redeploy for free, unlike the old
-Sheets workbook id that had to be pinned in an env var.
+it like any other config, and it's simply checked out fresh by the poll
+workflow on every run -- unlike the old Sheets workbook id that had to be
+pinned in an env var.
 
 The file is optional. A missing file behaves exactly like an empty one:
 no VIPs, no sender/domain rules, protection rules relying on those are

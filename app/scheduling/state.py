@@ -3,11 +3,15 @@
 Replaces the old Sheets-backed ``Settings`` row. A Gmail history id is not
 sensitive, so this is a small plain JSON file rather than an encrypted one
 (contrast :mod:`app.gmail.tokens`). It lives next to the OAuth token file for
-the same reason: on Render's free plan the local filesystem doesn't survive a
-redeploy, so a missing file after one just means the next poll re-bootstraps
-from "now" — a brief gap in real-time coverage across a redeploy, not a
-safety issue. That's the same trade-off a fresh Gmail connection already
-accepts on its first-ever poll.
+the same reason both need durability: ``.github/workflows/realtime-poll.yml``
+runs this on a fresh GitHub Actions runner every time, so nothing written
+here survives past the end of that one run *unless something commits it back
+to the repo* — which is exactly what that workflow's last step does with
+this file (the OAuth token instead re-seeds itself from a repo secret each
+run; see :mod:`app.gmail.tokens`). A missing file — the very first run, or a
+run whose commit step failed — just means the next poll re-bootstraps from
+"now": a brief gap in real-time coverage, not a safety issue. That's the same
+trade-off a fresh Gmail connection already accepts on its first-ever poll.
 """
 
 from __future__ import annotations

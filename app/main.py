@@ -59,9 +59,9 @@ def create_app() -> FastAPI:
         # deploy loudly rather than run insecurely.
         raise RuntimeError(
             "Refusing to start: APP_ENV=production but SESSION_SECRET is "
-            "still the placeholder value. Set a real one in Render's "
-            "environment variables — generate it with: "
-            "python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+            "still the placeholder value. Set a real one in the environment "
+            "running this (e.g. a GitHub Actions repo secret) — generate it "
+            "with: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
         )
 
     app = FastAPI(

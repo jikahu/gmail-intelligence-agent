@@ -13,7 +13,7 @@ What it does:
 - Connects one Gmail account via OAuth.
 - Classifies mail with a deterministic rules engine (`app/classification/`), consulting an AI provider only when the rules can't settle it.
 - Applies the result as real Gmail labels (`Critical`, `Review`, `Financial`, ...) — plus, additively, any existing label whose name matches the sender (e.g. `Uber`).
-- Classifies new mail as it arrives — `POST /realtime/poll` runs one check-and-apply cycle, called on a timer from outside the app (a GitHub Actions workflow, `.github/workflows/realtime-poll.yml`, does this every 10 minutes against the deployed app; there's no in-process background loop).
+- Classifies new mail as it arrives — `python -m app.scheduling` runs one check-and-apply cycle and exits; `.github/workflows/realtime-poll.yml` runs that directly on a GitHub Actions runner every 10 minutes. There's no hosted server and no in-process background loop.
 - Reads VIPs and sender/domain rules from a single checked-in file, `config/rules.toml`, that you edit directly.
 
 ## Requirements
@@ -83,6 +83,16 @@ See [`CLAUDE.md` §4](CLAUDE.md) for the canonical repo layout.
 
 ## Deployment
 
-Deploys to Render's free plan via [`render.yaml`](render.yaml). Render wipes local disk on every redeploy; `GOOGLE_OAUTH_SEED_REFRESH_TOKEN` (shown once on the Gmail-connected confirmation page after your first connect, pasted into Render's dashboard by hand) is what keeps the connection alive across redeploys without a paid persistent disk — see `app/gmail/tokens.py`.
+There is no hosted server. `.github/workflows/realtime-poll.yml` runs `python -m app.scheduling` directly on a GitHub Actions runner every 10 minutes — checkout, install, run one poll cycle, exit. Nothing stays running between ticks, so there's nothing to keep warm and nothing that goes to sleep.
 
-**Keeping it processing mail automatically.** `.github/workflows/realtime-poll.yml` calls the deployed app's `POST /realtime/poll` every 10 minutes via GitHub Actions — free, and frequent enough to also stop Render's free plan from spinning the service down (which happens after 15 minutes with no traffic). It targets `https://gmail-intelligence-agent.onrender.com` by default; if you rename the Render service or move hosts, set a repository variable named `APP_URL` (Settings → Secrets and variables → Actions → Variables) to override it. No separate cron service or paid plan required.
+**One-time setup:**
+
+1. Run the app locally (`uvicorn app.main:app --reload --port 8000`) and connect Gmail via `/` → **Connect Gmail**, same as local development above.
+2. Its callback page shows a `GOOGLE_OAUTH_SEED_REFRESH_TOKEN` value. In this repo's Settings → Secrets and variables → Actions, add these repo secrets:
+   - `ANTHROPIC_API_KEY`
+   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
+   - `GOOGLE_OAUTH_SEED_REFRESH_TOKEN` (from step 2)
+   - `SESSION_SECRET` (generate with `python -c "import secrets; print(secrets.token_urlsafe(48))"`)
+3. Under Settings → Actions → General → Workflow permissions, select **Read and write permissions** — the workflow commits the moved Gmail history cursor (`oauth_tokens/realtime_cursor.json`, not sensitive — just a number) back to the repo after each run so the next run knows where it left off. See `app/scheduling/state.py`.
+
+That's it — the schedule in `realtime-poll.yml` (`*/10 * * * *`) takes it from there. Trigger a run by hand any time with `gh workflow run realtime-poll.yml` or the Actions tab's **Run workflow** button.

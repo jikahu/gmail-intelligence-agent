@@ -1,7 +1,7 @@
 """Structured logging setup.
 
 Emits JSON-per-line log records so they are grep-able locally and parse cleanly
-in Render's log viewer. A small redaction layer strips fields that would
+in the GitHub Actions run log. A small redaction layer strips fields that would
 otherwise leak secrets or full email bodies:
 
 * Any field whose name looks like a secret (``token``, ``password``, ``api_key``,

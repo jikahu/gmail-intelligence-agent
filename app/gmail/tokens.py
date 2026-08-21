@@ -6,14 +6,17 @@ The file is encrypted with Fernet using a symmetric key derived from
 
 Trade-offs:
 - Simple, works on a personal Windows machine with zero extra setup.
-- The path is in ``.gitignore``. The plaintext refresh token never touches disk.
-- The local file alone is **not durable on Render** — its filesystem is
-  ephemeral, wiped on every redeploy. Phase 16 addresses this: if
-  ``GOOGLE_OAUTH_SEED_REFRESH_TOKEN`` is set (Render's own environment-variable
-  store, unlike the container's local disk, *does* survive a redeploy),
-  :func:`load_token` rebuilds the local file from it automatically when the
-  file is missing — see ``_seed_from_env`` below and
-  ``docs/plain-english/PHASE_16_RENDER_DEPLOYMENT.md``.
+- The path is in ``.gitignore``. The plaintext refresh token never touches disk
+  and is never committed to git.
+- The local file alone is **not durable on a disposable host** — a fresh
+  GitHub Actions runner starts with no filesystem state at all, every single
+  run. Phase 16 addresses this: if ``GOOGLE_OAUTH_SEED_REFRESH_TOKEN`` is set
+  (a GitHub Actions repo secret, unlike the runner's local disk, *does*
+  survive between runs), :func:`load_token` rebuilds the local file from it
+  automatically when the file is missing — see ``_seed_from_env`` below and
+  ``docs/plain-english/PHASE_16_RENDER_DEPLOYMENT.md`` (the mechanism was
+  originally built for Render's ephemeral filesystem; it works identically
+  for a GitHub Actions runner's).
 - Rotating ``SESSION_SECRET`` invalidates the stored token; the user will have
   to re-consent. This is intentional.
 """
@@ -119,13 +122,13 @@ def _seed_from_env() -> StoredToken | None:
     """Rebuild the local token file from ``GOOGLE_OAUTH_SEED_REFRESH_TOKEN``.
 
     Returns ``None`` (same as "no token at all") when no seed is configured —
-    the normal case for local development, and for a fresh Render deploy that
-    hasn't connected Gmail yet. When a seed *is* configured, this is what lets
-    the app survive a Render redeploy without a paid persistent disk: the
-    refresh token rarely changes once issued, so re-deriving the local file
-    from a durably-stored env var on every boot is enough. The access token is
-    left unset — ``google-auth`` refreshes it automatically from the refresh
-    token on the next API call.
+    the normal case for local development, and before Gmail has ever been
+    connected. When a seed *is* configured, this is what lets a brand new
+    GitHub Actions runner reconnect Gmail on every single run with no
+    persistent disk at all: the refresh token rarely changes once issued, so
+    re-deriving the local file from a durably-stored repo secret on every run
+    is enough. The access token is left unset — ``google-auth`` refreshes it
+    automatically from the refresh token on the next API call.
     """
     settings = get_settings()
     seed = settings.google_oauth_seed_refresh_token

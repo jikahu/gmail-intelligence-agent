@@ -3,8 +3,9 @@
 Polling instead of push notifications is a deliberate product decision (see
 ``docs/plain-english/PHASE_13_REALTIME_PROCESSING.md``): no Google Cloud
 Pub/Sub topic, no public webhook to secure, no domain verification, and it
-works unchanged on the single Render web service this app already deploys
-as. The trade-off is that new mail is noticed on the next poll rather than
+works unchanged whether this runs as a long-lived server or, as it does now,
+a fresh process started fresh by each GitHub Actions cron tick. The
+trade-off is that new mail is noticed on the next poll rather than
 the instant it lands — an acceptable "near" in "near-real-time" for a
 single-user personal agent.
 

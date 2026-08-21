@@ -1,44 +1,81 @@
 name: Poll Gmail for new mail
 
-# Calls the deployed app's POST /realtime/poll on a timer instead of running
-# a background loop inside the app itself. That endpoint finds mail that's
-# new since the last check, classifies it, and applies it if the write gate
-# (DRY_RUN=false + GMAIL_PROCESSING_ENABLED=true) is open on the server.
+# Runs one real-time poll cycle directly on the GitHub Actions runner —
+# `python -m app.scheduling`, the same code POST /realtime/poll used to call
+# on a hosted server. There is no server anymore: no Render, no host to keep
+# warm, no cold starts, no HTTP hop that can time out. Each run is a fresh,
+# disposable machine that checks out the repo, installs dependencies, runs
+# one cycle, and throws itself away.
 #
-# The 10-minute interval is deliberate: Render's free plan spins the service
-# down after 15 minutes with no incoming requests, so a ping every 10
-# minutes both checks for mail and keeps the service from ever fully
-# sleeping — see render.yaml.
+# State that needs to outlive one run:
+# - The OAuth refresh token is NOT stored here. It's re-seeded every run from
+#   the GOOGLE_OAUTH_SEED_REFRESH_TOKEN secret (the same mechanism that used
+#   to survive a Render redeploy — see app/gmail/tokens.py). A refresh token
+#   barely ever changes once issued, so re-deriving the local encrypted file
+#   from a secret on every run is enough; nothing sensitive is ever written
+#   to the repo.
+# - The Gmail history cursor (just a number, not sensitive) IS committed
+#   back to oauth_tokens/realtime_cursor.json after each run so the next run
+#   knows where it left off. See app/scheduling/state.py.
 #
-# APP_URL isn't secret (it's just the app's public base URL), but it lives
-# in a repo variable rather than being hardcoded so changing host doesn't
-# need a code change. Set it once under this repo's Settings -> Secrets and
-# variables -> Actions -> Variables -> New repository variable, name
-# APP_URL, value e.g. https://gmail-intelligence-agent.onrender.com
+# Required repo secrets (Settings -> Secrets and variables -> Actions):
+#   ANTHROPIC_API_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+#   GOOGLE_OAUTH_SEED_REFRESH_TOKEN, SESSION_SECRET
+# Optional repo variable: GOOGLE_OAUTH_SEED_ACCOUNT_EMAIL (cosmetic only).
 #
-# GitHub's schedule trigger isn't exact — under load it can fire 30+ minutes
-# late, which is longer than Render's 15-minute idle window. When that
-# happens this hits a cold service: either curl times out waiting for it to
-# wake (exit 28) or it briefly answers 502 while still starting up (exit
-# 22). --retry covers both cases (curl's transient-error list includes
-# timeouts and 502/503/504) so one slow wake-up doesn't fail the whole run.
-# No mail is lost either way — the next poll resumes from the saved cursor.
+# Requires "Read and write permissions" for GITHUB_TOKEN (Settings -> Actions
+# -> General -> Workflow permissions) so this can commit the cursor update.
 
 on:
   schedule:
     - cron: "*/10 * * * *"
   workflow_dispatch: {}
 
+concurrency:
+  group: gmail-realtime-poll
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
 jobs:
   poll:
     runs-on: ubuntu-latest
     steps:
-      - name: POST /realtime/poll
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e ".[anthropic]"
+
+      - name: Run one poll cycle
         env:
-          APP_URL: ${{ vars.APP_URL || 'https://gmail-intelligence-agent.onrender.com' }}
+          APP_ENV: production
+          LOG_LEVEL: INFO
+          DRY_RUN: "false"
+          GMAIL_PROCESSING_ENABLED: "true"
+          AI_PROVIDER: anthropic
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_OAUTH_SEED_REFRESH_TOKEN: ${{ secrets.GOOGLE_OAUTH_SEED_REFRESH_TOKEN }}
+          GOOGLE_OAUTH_SEED_ACCOUNT_EMAIL: ${{ vars.GOOGLE_OAUTH_SEED_ACCOUNT_EMAIL }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+        run: python -m app.scheduling
+
+      - name: Commit updated history cursor
+        if: always()
         run: |
-          curl --fail-with-body --silent --show-error \
-            --max-time 120 --retry 2 --retry-delay 10 \
-            -X POST "$APP_URL/realtime/poll" \
-            -o response.json -w "\nHTTP %{http_code}\n"
-          cat response.json
+          if [ -n "$(git status --porcelain oauth_tokens/realtime_cursor.json)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add oauth_tokens/realtime_cursor.json
+            git commit -m "chore: advance realtime poll cursor"
+            git push
+          else
+            echo "Cursor unchanged, nothing to commit."
+          fi

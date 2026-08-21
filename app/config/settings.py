@@ -55,12 +55,12 @@ class Settings(BaseSettings):
     google_client_secret: str | None = None
     google_oauth_redirect_uri: str = "http://localhost:8000/oauth/callback"
 
-    # OAuth token durability on a host with an ephemeral filesystem, e.g.
-    # Render's free tier. The local encrypted token file doesn't survive a
-    # redeploy there, but a refresh token barely ever changes once issued —
-    # so it's durably re-seeded from here instead of a paid persistent disk.
-    # Render's own environment-variable store (unlike the container's local
-    # disk) survives every redeploy. Optional — leave unset for local
+    # OAuth token durability on a host with an ephemeral filesystem, e.g. a
+    # fresh GitHub Actions runner. The local encrypted token file doesn't
+    # survive between runs there, but a refresh token barely ever changes
+    # once issued — so it's durably re-seeded from here instead of needing a
+    # persistent disk. GitHub's repo-secrets store (unlike the runner's local
+    # disk) survives between runs. Optional — leave unset for local
     # development, where the local file is enough on its own.
     google_oauth_seed_refresh_token: str | None = None
     google_oauth_seed_account_email: str | None = None
