@@ -15,6 +15,14 @@ name: Poll Gmail for new mail
 # need a code change. Set it once under this repo's Settings -> Secrets and
 # variables -> Actions -> Variables -> New repository variable, name
 # APP_URL, value e.g. https://gmail-intelligence-agent.onrender.com
+#
+# GitHub's schedule trigger isn't exact — under load it can fire 30+ minutes
+# late, which is longer than Render's 15-minute idle window. When that
+# happens this hits a cold service: either curl times out waiting for it to
+# wake (exit 28) or it briefly answers 502 while still starting up (exit
+# 22). --retry covers both cases (curl's transient-error list includes
+# timeouts and 502/503/504) so one slow wake-up doesn't fail the whole run.
+# No mail is lost either way — the next poll resumes from the saved cursor.
 
 on:
   schedule:
@@ -30,7 +38,7 @@ jobs:
           APP_URL: ${{ vars.APP_URL || 'https://gmail-intelligence-agent.onrender.com' }}
         run: |
           curl --fail-with-body --silent --show-error \
-            --max-time 90 \
+            --max-time 120 --retry 2 --retry-delay 10 \
             -X POST "$APP_URL/realtime/poll" \
             -o response.json -w "\nHTTP %{http_code}\n"
           cat response.json
