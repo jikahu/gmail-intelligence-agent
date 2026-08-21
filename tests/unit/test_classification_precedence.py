@@ -141,7 +141,8 @@ def test_bulk_does_not_override_substack(context) -> None:
     )
 
     assert not result.review
-    assert result.keep_in_inbox
+    assert result.archive
+    assert not result.keep_in_inbox
 
 
 def test_security_outranks_relationship(context) -> None:

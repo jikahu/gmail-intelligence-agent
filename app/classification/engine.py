@@ -499,16 +499,6 @@ def classify(
     keep_in_inbox = policy.keep_in_inbox
     archive = policy.archive
 
-    # A newsletter stays in the Inbox when the newsletter itself is why we kept
-    # it — Substack, or a sender the user approved. If some *other* protection
-    # rescued it from Review, that other category decides where it is filed.
-    if (
-        Label.NEWSLETTER in labels
-        and not review
-        and (signals.is_substack or (rule is not None and rule.is_whitelist))
-    ):
-        keep_in_inbox, archive = True, False
-
     if priority is Priority.P1_URGENT and not review:
         if not keep_in_inbox:
             triggered.append("P1 urgency keeps this in the Inbox")

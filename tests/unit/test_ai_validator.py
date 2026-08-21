@@ -162,7 +162,8 @@ def test_a_vetoed_review_does_not_leave_the_review_label_behind(context) -> None
     assert not decision.review
     assert not decision.has(Label.REVIEW)
     assert not decision.has(Label.LOW_VALUE)
-    assert decision.keep_in_inbox
+    assert decision.archive
+    assert not decision.keep_in_inbox
 
 
 def test_ai_cannot_cause_a_gmail_action(context) -> None:

@@ -72,24 +72,26 @@ Sensible modularization only. No enterprise architecture for a single-user tool.
 
 Multiple labels may apply to one email — do not force single-label. Label names are the literal Gmail label names (see `app/classification/labels.py`); they carry no prefix.
 
+Inbox placement follows one rule (§7.1): only `Critical`, `Action-Required`, and `Security` keep a message in the Inbox. Every other label archives once the message has been classified and labeled — the label is still applied and the message is never deleted, it just isn't pinned to the Inbox tab.
+
 | # | Label | Notes |
 |---|---|---|
 | 1 | `Critical` | Stay in Inbox, mark Important |
 | 2 | `Action-Required` | Stay in Inbox, mark Important |
-| 3 | `Personal` | Stay in Inbox |
-| 4 | `Work-Business` | Stay in Inbox |
+| 3 | `Personal` | Archive once labeled |
+| 4 | `Work-Business` | Archive once labeled |
 | 5 | `Purchases-Receipts` | Archive; preserve |
-| 6 | `Newsletter` | Substack kept; others → Review |
+| 6 | `Newsletter` | Substack and approved senders kept (not sent to Review); others → Review. Both archive |
 | 7 | `Low-Value` | |
 | 8 | `Trash-Candidate` | **Internal analytic concept only — never written to Gmail, never causes a Trash action** |
 | 9 | `Review` | Archive; never delete automatically |
 | 10 | `Education` | Archive unless action/deadline |
 | 11 | `Security` | See §7 handling |
 | 12 | `Financial` | See §7 handling |
-| 13 | `Career` | Stay in Inbox |
+| 13 | `Career` | Archive once labeled |
 | 14 | `Suspicious` | Add `Review`; never open links/attachments |
-| 15 | `Important-Document` | Preserve original message |
-| 16 | `Subscription-Review` | Never auto-cancel |
+| 15 | `Important-Document` | Archive; preserve original message |
+| 16 | `Subscription-Review` | Archive once labeled; never auto-cancel |
 | 17 | `Expired` | Combine with `Review`; archive |
 
 ---
@@ -102,17 +104,23 @@ Priority is independent of classification: **P1 Urgent**, **P2 Important**, **P3
 - **P2:** financial/legal issue, important policy or account change, action-soon items, career opportunity, material change to fees/prices/services/coverage/terms.
 - **P3:** routine personal, routine work, useful informational.
 
+### 7.1 Inbox placement
+
+Only `Critical`, `Action-Required`, and `Security` keep a message in the Inbox. Every other category archives once the message has been classified and labeled — the label is still applied, the message is never deleted, it's just filed out of the Inbox tab the same way `Purchases-Receipts` always has been. If a message carries more than one label, visibility still wins: any label that wants it kept in the Inbox overrides every label that would archive it (`app/classification/labels.py:combine_policies`) — so a `Personal` + `Action-Required` message stays. A P1-urgent message always stays in the Inbox regardless of category, for the same reason.
+
+This replaced an earlier version of the spec where `Personal`, `Work-Business`, `Financial`, `Career`, and approved `Newsletter` senders stayed in the Inbox too. The user asked for a stricter default: once the agent has actually classified and labeled something, it should leave the Inbox unless it's one of the three categories urgent enough to need to stay in view.
+
 Category-specific behavior:
 
 | Category | Action | If action/deadline exists |
 |---|---|---|
-| Personal | Keep in Inbox | Don't auto-mark Important unless P1/P2 or Action Required/Critical |
-| Work/Business | Keep in Inbox | Add `Action-Required` + mark Important |
-| Purchases/Receipts | Archive, preserve | Failed payment / delivery problem → keep in Inbox + Action Required |
-| Education | Archive genuine content | Add `Action-Required` + keep in Inbox. Marketing-as-education gets no protection |
+| Personal | Archive once labeled | Don't auto-mark Important unless P1/P2 or Action Required/Critical |
+| Work/Business | Archive once labeled | Add `Action-Required` + mark Important (keeps it in the Inbox, per §7.1) |
+| Purchases/Receipts | Archive, preserve | Failed payment / delivery problem → add `Action-Required` (keeps it in the Inbox) |
+| Education | Archive genuine content | Add `Action-Required` (keeps it in the Inbox). Marketing-as-education gets no protection |
 | Security | `Critical + Security`, keep in Inbox, mark Important | Phishing-like: add `Suspicious + Review`, archive, never open links/attachments. Security may override relationship protection |
-| Financial | `Financial` (bank/investment statements, payments, balances, bills) | Example combos: Bank stmt → `Critical+Financial`. Payment declined → `Critical+Financial+Action-Required`. Money mention alone ≠ Critical |
-| Career | Keep in Inbox | Add `Action-Required` + mark Important |
+| Financial | `Financial` (bank/investment statements, payments, balances, bills) — archives once labeled unless also `Critical`/`Action-Required` | Example combos: Bank stmt → `Critical+Financial`. Payment declined → `Critical+Financial+Action-Required`. Money mention alone ≠ Critical |
+| Career | Archive once labeled | Add `Action-Required` + mark Important (keeps it in the Inbox, per §7.1) |
 
 ---
 
@@ -130,7 +138,7 @@ Protection ≠ stays in Inbox — a normal receipt may be protected from Review 
 
 ## 9. Routing Rules
 
-**Newsletters.** Substack → `Newsletter`, keep. All others default to `Review` unless explicitly approved via `config/rules.toml`.
+**Newsletters.** Substack → `Newsletter`, never sent to Review (archives per §7.1, same as everything else). All others default to `Review` unless explicitly approved via `config/rules.toml`.
 
 **Review candidates** (be aggressive): promotions, advertising, social notifications, cold sales, coupons, webinar promos, surveys, crypto promos, repetitive automated notifications, non-approved newsletters, generic engagement, expired low-value messages, bulk/mass email without stronger protection.
 

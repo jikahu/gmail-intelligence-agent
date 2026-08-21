@@ -37,7 +37,9 @@ def context() -> ClassificationContext:
 # --------------------------------------------------------------------
 
 
-def test_bank_statement_is_financial_and_stays_visible(context) -> None:
+def test_bank_statement_is_financial_and_archives_not_reviewed(context) -> None:
+    """Financial alone (no Critical/Action-Required/Security) still archives
+    once labeled — CLAUDE.md §7.1 — but must never be routed to Review."""
     result = classify(
         make_message(sender="alerts@chase.com", subject="Your account statement is ready"),
         context,
@@ -45,7 +47,8 @@ def test_bank_statement_is_financial_and_stays_visible(context) -> None:
 
     assert result.has(Label.FINANCIAL)
     assert result.priority is Priority.P2_IMPORTANT
-    assert result.keep_in_inbox
+    assert result.archive
+    assert not result.keep_in_inbox
     assert not result.review
     assert result.protected
 
@@ -156,7 +159,9 @@ def test_cancelled_flight_is_p1_and_never_archived(context) -> None:
 # --------------------------------------------------------------------
 
 
-def test_substack_is_kept_not_reviewed(context) -> None:
+def test_substack_archives_not_reviewed(context) -> None:
+    """Substack is never sent to Review, but — like every other category —
+    still archives once labeled (CLAUDE.md §7.1)."""
     result = classify(
         make_message(
             sender="writer@goodwriter.substack.com",
@@ -168,7 +173,8 @@ def test_substack_is_kept_not_reviewed(context) -> None:
 
     assert result.has(Label.NEWSLETTER)
     assert not result.review
-    assert result.keep_in_inbox
+    assert result.archive
+    assert not result.keep_in_inbox
 
 
 def test_other_newsletters_default_to_review(context) -> None:
@@ -271,13 +277,14 @@ def test_trash_candidate_never_reaches_gmail() -> None:
 # --------------------------------------------------------------------
 
 
-def test_known_contact_is_personal_and_kept(context) -> None:
+def test_known_contact_is_personal_and_archives(context) -> None:
     result = classify(
         make_message(sender="friend@example.com", subject="dinner on saturday?"), context
     )
 
     assert result.has(Label.PERSONAL)
-    assert result.keep_in_inbox
+    assert result.archive
+    assert not result.keep_in_inbox
     assert result.protected
 
 
@@ -314,13 +321,14 @@ def test_friend_mentioning_a_sale_is_still_personal(context) -> None:
     assert not result.review
 
 
-def test_vip_engagement_bait_is_still_kept(context) -> None:
+def test_vip_engagement_bait_archives_not_reviewed(context) -> None:
     result = classify(
         make_message(sender="boss@work.com", subject="we miss you at standup"), context
     )
 
     assert not result.review
-    assert result.keep_in_inbox
+    assert result.archive
+    assert not result.keep_in_inbox
 
 
 def test_prior_correspondent_is_protected(context) -> None:

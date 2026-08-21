@@ -82,21 +82,29 @@ class LabelPolicy:
 
 
 #: Per-label policy, transcribed from CLAUDE.md §6.
+#:
+#: Only Critical, Action-Required, and Security keep a message in the Inbox —
+#: everything else archives once it's been classified and labeled (CLAUDE.md
+#: §7.1: "once labeled, archived unless Critical/Action-Required/Security").
+#: The label is still applied and the message is never deleted; it just isn't
+#: pinned to the Inbox tab. Archiving still loses to any label that wants the
+#: message visible, via ``combine_policies``' "any keep_in_inbox wins" rule —
+#: so e.g. a message that is both Personal and Action-Required still stays.
 LABEL_POLICIES: dict[Label, LabelPolicy] = {
     Label.CRITICAL: LabelPolicy(keep_in_inbox=True, mark_important=True),
     Label.ACTION_REQUIRED: LabelPolicy(keep_in_inbox=True, mark_important=True),
-    Label.PERSONAL: LabelPolicy(keep_in_inbox=True),
-    Label.WORK_BUSINESS: LabelPolicy(keep_in_inbox=True),
+    Label.PERSONAL: LabelPolicy(archive=True),
+    Label.WORK_BUSINESS: LabelPolicy(archive=True),
     Label.PURCHASES_RECEIPTS: LabelPolicy(
         archive=True, note="Archived but preserved; never a Review candidate."
     ),
-    # Deliberately neutral. CLAUDE.md §6 keeps *Substack and approved senders*,
-    # not newsletters in general — so the "keep in Inbox" decision belongs to
-    # the engine, which knows whether this particular sender is approved. If
-    # this label asserted keep_in_inbox, a course email that happens to carry
-    # list headers would be pulled out of its own category's filing.
+    # Substack and approved senders used to be kept in the Inbox instead of
+    # archived — that carve-out is gone along with every other category's.
+    # The label is still applied the same way (engine.py decides Substack vs.
+    # "not yet approved, → Review"); only the placement changed.
     Label.NEWSLETTER: LabelPolicy(
-        note="Substack and approved senders are kept; others are routed to Review.",
+        archive=True,
+        note="Substack and approved senders are kept (not sent to Review); others are routed to Review. Both archive.",
     ),
     Label.LOW_VALUE: LabelPolicy(archive=True),
     Label.TRASH_CANDIDATE: LabelPolicy(
@@ -111,16 +119,18 @@ LABEL_POLICIES: dict[Label, LabelPolicy] = {
         archive=True, note="Archived unless an action or deadline is present."
     ),
     Label.SECURITY: LabelPolicy(keep_in_inbox=True, mark_important=True),
-    Label.FINANCIAL: LabelPolicy(keep_in_inbox=True),
-    Label.CAREER: LabelPolicy(keep_in_inbox=True),
+    Label.FINANCIAL: LabelPolicy(archive=True),
+    Label.CAREER: LabelPolicy(archive=True),
     Label.SUSPICIOUS: LabelPolicy(
         archive=True,
         note="Always paired with Review. Links and attachments are never opened.",
     ),
     Label.IMPORTANT_DOCUMENT: LabelPolicy(
-        note="Preserve the original message and its attachment."
+        archive=True, note="Preserve the original message and its attachment."
     ),
-    Label.SUBSCRIPTION_REVIEW: LabelPolicy(note="Never auto-cancels anything."),
+    Label.SUBSCRIPTION_REVIEW: LabelPolicy(
+        archive=True, note="Never auto-cancels anything."
+    ),
     Label.EXPIRED: LabelPolicy(archive=True, note="Paired with Review."),
 }
 
