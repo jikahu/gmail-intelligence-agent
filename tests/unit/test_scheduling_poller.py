@@ -19,7 +19,7 @@ from app.scheduling import poller as poller_mod
 from app.scheduling import state as state_mod
 from tests.fixtures.emails import gmail_message
 
-USER_EMAIL = "jikahu@gmail.com"
+USER_EMAIL = "user@example.com"
 
 
 # --------------------------------------------------------------------

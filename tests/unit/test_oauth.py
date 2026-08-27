@@ -69,13 +69,13 @@ def test_exchange_code_stores_token(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_flow.fetch_token = MagicMock()
 
     with patch.object(oauth, "_flow", return_value=fake_flow), patch.object(
-        oauth, "_try_lookup_email", return_value="jikahu@gmail.com"
+        oauth, "_try_lookup_email", return_value="user@example.com"
     ):
         stored = oauth.exchange_code_for_token(code="auth-code", state=state)
 
     fake_flow.fetch_token.assert_called_once_with(code="auth-code")
     assert stored.refresh_token == "1//refresh"
-    assert stored.account_email == "jikahu@gmail.com"
+    assert stored.account_email == "user@example.com"
 
     loaded = tokens_module.load_token()
     assert loaded is not None

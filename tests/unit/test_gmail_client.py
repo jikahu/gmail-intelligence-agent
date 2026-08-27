@@ -63,10 +63,10 @@ def test_list_recent_summaries_uses_metadata_format() -> None:
 
 
 def test_get_profile_delegates() -> None:
-    service = _fake_service_returning([], profile={"emailAddress": "jikahu@gmail.com"})
+    service = _fake_service_returning([], profile={"emailAddress": "user@example.com"})
     client = GmailReadClient(service=service)
     profile = client.get_profile()
-    assert profile["emailAddress"] == "jikahu@gmail.com"
+    assert profile["emailAddress"] == "user@example.com"
 
 
 def test_format_summaries_for_display_is_json_safe() -> None:

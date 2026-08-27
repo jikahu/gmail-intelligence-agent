@@ -27,7 +27,7 @@ from tests.fixtures.emails import bulk_headers, make_message, pdf, substack_head
 #: correspondent. Examples that shouldn't be protected deliberately use
 #: senders outside this set.
 GOLDEN_CONTEXT = ClassificationContext(
-    user_email="jikahu@gmail.com",
+    user_email="user@example.com",
     vip_emails={"vip@example.com"},
     known_contacts={"contact@example.com"},
     prior_correspondents={"friend@example.com"},

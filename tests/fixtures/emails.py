@@ -7,7 +7,7 @@ from typing import Any
 
 from app.classification.message import Attachment, EmailMessage
 
-DEFAULT_USER = "jikahu@gmail.com"
+DEFAULT_USER = "user@example.com"
 
 
 def make_message(

@@ -27,7 +27,7 @@ def _sample_token() -> StoredToken:
         access_token="ya29.access-token-abc",
         expiry_iso="2026-08-14T00:00:00+00:00",
         scopes=["openid", "https://www.googleapis.com/auth/gmail.readonly"],
-        account_email="jikahu@gmail.com",
+        account_email="user@example.com",
         client_id="client-id-abc.apps.googleusercontent.com",
     )
 
@@ -37,7 +37,7 @@ def test_save_load_round_trips() -> None:
     loaded = load_token()
     assert loaded is not None
     assert loaded.refresh_token == "1//refresh-token-xyz"
-    assert loaded.account_email == "jikahu@gmail.com"
+    assert loaded.account_email == "user@example.com"
 
 
 def test_stored_file_is_not_plaintext() -> None:
@@ -45,7 +45,7 @@ def test_stored_file_is_not_plaintext() -> None:
     raw = tokens_module.TOKEN_FILE.read_bytes()
     assert b"refresh-token-xyz" not in raw
     assert b"access-token-abc" not in raw
-    assert b"jikahu@gmail.com" not in raw
+    assert b"user@example.com" not in raw
 
 
 def test_load_returns_none_when_missing() -> None:
@@ -92,7 +92,7 @@ def _clear_settings_cache() -> None:
 
 def test_load_seeds_from_env_when_file_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GOOGLE_OAUTH_SEED_REFRESH_TOKEN", "1//seeded-refresh-token")
-    monkeypatch.setenv("GOOGLE_OAUTH_SEED_ACCOUNT_EMAIL", "jikahu@gmail.com")
+    monkeypatch.setenv("GOOGLE_OAUTH_SEED_ACCOUNT_EMAIL", "user@example.com")
     _clear_settings_cache()
 
     assert not token_exists()
@@ -100,7 +100,7 @@ def test_load_seeds_from_env_when_file_missing(monkeypatch: pytest.MonkeyPatch) 
 
     assert loaded is not None
     assert loaded.refresh_token == "1//seeded-refresh-token"
-    assert loaded.account_email == "jikahu@gmail.com"
+    assert loaded.account_email == "user@example.com"
     assert loaded.access_token is None
     # The seed is persisted locally so subsequent reads/refreshes don't need
     # the env var again this process.

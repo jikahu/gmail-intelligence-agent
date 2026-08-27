@@ -110,7 +110,7 @@ def _patch_successful_exchange(monkeypatch: pytest.MonkeyPatch, refresh_token: s
     fake_flow.fetch_token = MagicMock()
 
     monkeypatch.setattr(oauth, "_flow", lambda: fake_flow)
-    monkeypatch.setattr(oauth, "_try_lookup_email", lambda creds: "jikahu@gmail.com")
+    monkeypatch.setattr(oauth, "_try_lookup_email", lambda creds: "user@example.com")
 
 
 def test_oauth_callback_reveals_refresh_token_once(
