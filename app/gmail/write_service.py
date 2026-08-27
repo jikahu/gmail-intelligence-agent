@@ -106,7 +106,7 @@ def apply_recent(
         client = get_write_client()
         for r in results:
             vendor_labels[r.message.message_id] = gmail_apply.vendor_label_for(
-                client, r.message
+                client, r.message, forced=r.classification.forced_vendor_label
             )
         label_map = gmail_apply.label_name_map_for(
             client,

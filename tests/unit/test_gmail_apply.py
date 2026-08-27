@@ -170,3 +170,41 @@ def test_apply_to_message_issues_exactly_one_modify_call() -> None:
     assert change.changed is True
     assert change.labels_after == ("Financial", "INBOX")
     assert change.inbox_after is True
+
+
+# --------------------------------------------------------------------
+# vendor_label_for — a forced (config vendor rule) name never gets created
+# --------------------------------------------------------------------
+
+
+def test_vendor_label_for_returns_the_forced_name_when_it_already_exists() -> None:
+    client = MagicMock()
+    client.label_names.return_value = {"Equity", "Uber"}
+    message = make_message(sender="statements@equitybank.co.ke")
+
+    result = gmail_apply.vendor_label_for(client, message, forced="Equity")
+
+    assert result == "Equity"
+
+
+def test_vendor_label_for_never_invents_a_label_for_a_missing_forced_name() -> None:
+    """CLAUDE.md §10: vendor labels are never created by this app -- a
+    config vendor rule naming a label that doesn't exist yet in the mailbox
+    yields no vendor label this cycle, not a fallback guess."""
+    client = MagicMock()
+    client.label_names.return_value = {"Uber"}
+    message = make_message(sender="statements@equitybank.co.ke")
+
+    result = gmail_apply.vendor_label_for(client, message, forced="Equity")
+
+    assert result is None
+
+
+def test_vendor_label_for_falls_back_to_the_automatic_match_without_forced() -> None:
+    client = MagicMock()
+    client.label_names.return_value = {"Uber"}
+    message = make_message(sender="receipts@uber.com")
+
+    result = gmail_apply.vendor_label_for(client, message)
+
+    assert result == "Uber"

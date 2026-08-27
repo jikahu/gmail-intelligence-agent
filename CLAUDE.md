@@ -175,9 +175,16 @@ action = ""               # label name, required only for classify_as
 domain = "chase.com"
 rule_type = "whitelist"
 action = ""
+
+[[vendor_rules]]
+match = "subject_contains"   # subject_contains | sender_contains (sender's domain OR display name)
+value = "equity"
+label = "Equity"             # an existing Gmail label — never auto-created
 ```
 
 A missing or unparsable file degrades to an empty ruleset rather than failing — the safe direction, since a thinner ruleset makes *less* eligible for special treatment, never more (`app/rules/store.py`).
+
+**Vendor rules.** `vendor_rules` swap categorization entirely for a named existing Gmail label the user already made by hand — same "skip categorization" precedence as a sender/domain `classify_as` rule (step 2 below), just matched by a substring in the subject or sender instead of an exact address. Used for cases like "any email with 'Equity' in the subject goes to my existing `Equity` label, not `Financial`." The target `label` is never created — if it doesn't exist yet in the mailbox, the message still skips ordinary categorization but gets no extra label until the user creates it (`app/classification/engine.py:_match_vendor_rule`, `app/gmail/apply.py:vendor_label_for`).
 
 ---
 

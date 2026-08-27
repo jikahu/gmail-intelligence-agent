@@ -24,6 +24,15 @@ VALID_RULE_TYPES: frozenset[str] = frozenset(
     {RULE_WHITELIST, RULE_BLACKLIST, RULE_CLASSIFY_AS}
 )
 
+#: How a vendor rule's ``value`` is matched against the message.
+VENDOR_MATCH_SUBJECT_CONTAINS = "subject_contains"
+#: Checks the sender's domain *and* display name -- either counts as a match.
+VENDOR_MATCH_SENDER_CONTAINS = "sender_contains"
+
+VALID_VENDOR_MATCH_TYPES: frozenset[str] = frozenset(
+    {VENDOR_MATCH_SUBJECT_CONTAINS, VENDOR_MATCH_SENDER_CONTAINS}
+)
+
 
 @dataclass(frozen=True)
 class Rule:
@@ -48,6 +57,21 @@ class Rule:
         return f"{self.scope} rule {self.rule_type} for {self.target}{detail}"
 
 
+@dataclass(frozen=True)
+class VendorRule:
+    """A config-defined swap (CLAUDE.md §11): mail matching ``value`` gets
+    ``label`` -- an existing Gmail folder the user already made, never a
+    label this app creates itself -- instead of whatever the deterministic
+    engine would otherwise categorize it as."""
+
+    match: str
+    value: str
+    label: str
+
+    def describe(self) -> str:
+        return f"vendor rule {self.match}={self.value!r} → {self.label}"
+
+
 @dataclass
 class ClassificationContext:
     """Who the user trusts, and what they've told us explicitly."""
@@ -55,6 +79,7 @@ class ClassificationContext:
     user_email: str = ""
     sender_rules: dict[str, Rule] = field(default_factory=dict)
     domain_rules: dict[str, Rule] = field(default_factory=dict)
+    vendor_rules: tuple[VendorRule, ...] = ()
     vip_emails: set[str] = field(default_factory=set)
     #: Google Contacts + Other Contacts.
     known_contacts: set[str] = field(default_factory=set)
@@ -124,6 +149,24 @@ def build_rule(
     )
 
 
+def build_vendor_rule(match: str, value: str, label: str) -> VendorRule | None:
+    """Normalize one ``[[vendor_rules]]`` row, or ``None`` if unusable."""
+    normalized_match = (match or "").strip().lower()
+    normalized_value = (value or "").strip().lower()
+    normalized_label = (label or "").strip()
+
+    if normalized_match not in VALID_VENDOR_MATCH_TYPES:
+        log.warning(
+            "vendor_rule_ignored_unknown_match_type",
+            extra={"vendor_rule_match": normalized_match},
+        )
+        return None
+    if not normalized_value or not normalized_label:
+        return None
+
+    return VendorRule(match=normalized_match, value=normalized_value, label=normalized_label)
+
+
 def context_from_rules(
     rules_file,
     user_email: str = "",
@@ -160,10 +203,17 @@ def context_from_rules(
         if rule is not None:
             domain_rules[rule.target] = rule
 
+    vendor_rules = tuple(
+        vendor_rule
+        for row in rules_file.vendor_rules
+        if (vendor_rule := build_vendor_rule(row.match, row.value, row.label)) is not None
+    )
+
     return ClassificationContext(
         user_email=(user_email or "").strip().lower(),
         sender_rules=sender_rules,
         domain_rules=domain_rules,
+        vendor_rules=vendor_rules,
         vip_emails=set(rules_file.vip_emails),
         known_contacts={c.lower() for c in (known_contacts or set())},
         prior_correspondents={c.lower() for c in (prior_correspondents or set())},
@@ -175,8 +225,13 @@ __all__ = (
     "RULE_BLACKLIST",
     "RULE_CLASSIFY_AS",
     "RULE_WHITELIST",
+    "VALID_VENDOR_MATCH_TYPES",
+    "VENDOR_MATCH_SENDER_CONTAINS",
+    "VENDOR_MATCH_SUBJECT_CONTAINS",
     "Rule",
     "VALID_RULE_TYPES",
+    "VendorRule",
     "build_rule",
+    "build_vendor_rule",
     "context_from_rules",
 )

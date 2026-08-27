@@ -237,7 +237,9 @@ def run_poll_cycle(use_ai: bool = True) -> PollReport:
 
             try:
                 if gate.allowed:
-                    vendor_label_name = gmail_apply.vendor_label_for(write_client, message)
+                    vendor_label_name = gmail_apply.vendor_label_for(
+                        write_client, message, forced=decision.forced_vendor_label
+                    )
                     label_map = gmail_apply.label_name_map_for(
                         write_client,
                         [decision],

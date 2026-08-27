@@ -28,7 +28,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from app.classification import patterns, signals as signals_module
-from app.classification.context import ClassificationContext, Rule
+from app.classification.context import ClassificationContext, Rule, VendorRule
 from app.classification.labels import (
     IMPORTANT_LABELS,
     Label,
@@ -103,6 +103,11 @@ class Classification:
     needs_ai: bool = False
     rationale: str = ""
     sent_by_user: bool = False
+    #: Set when a config vendor rule (CLAUDE.md §11) matched: the existing
+    #: Gmail label to apply instead of a category label like Financial. Never
+    #: created if it doesn't already exist -- same guarantee as the automatic
+    #: sender-based vendor matcher in :mod:`app.gmail.vendor_labels`.
+    forced_vendor_label: str | None = None
 
     @property
     def gmail_label_names(self) -> list[str]:
@@ -157,6 +162,27 @@ def _apply_explicit_rule(
         labels.add(forced)
         return True
     return False
+
+
+def _match_vendor_rule(
+    message: EmailMessage, context: ClassificationContext
+) -> VendorRule | None:
+    """First ``config/rules.toml`` vendor rule (CLAUDE.md §11) this message
+    matches, or ``None``. ``subject_contains`` checks the subject only;
+    ``sender_contains`` checks the sender's domain *and* display name --
+    either counts."""
+    subject = message.subject.lower()
+    sender_domain = message.sender_domain.lower()
+    sender_name = message.sender_name.lower()
+
+    for rule in context.vendor_rules:
+        if rule.match == "subject_contains" and rule.value in subject:
+            return rule
+        if rule.match == "sender_contains" and (
+            rule.value in sender_domain or rule.value in sender_name
+        ):
+            return rule
+    return None
 
 
 # --------------------------------------------------------------------
@@ -429,6 +455,16 @@ def classify(
     rule = protection.matched_rule
     rule_decided = _apply_explicit_rule(rule, labels, triggered)
 
+    # An exact sender/domain rule already decided it -- that outranks a
+    # substring-based vendor rule, so only look for one otherwise.
+    forced_vendor_label: str | None = None
+    if not rule_decided:
+        vendor_rule = _match_vendor_rule(message, context)
+        if vendor_rule is not None:
+            rule_decided = True
+            forced_vendor_label = vendor_rule.label
+            triggered.append(f"{vendor_rule.describe()}, categorization skipped")
+
     if protection.is_vip:
         triggered.append("approved VIP sender")
     if protection.protected:
@@ -539,6 +575,7 @@ def classify(
         rules_triggered=tuple(triggered),
         needs_ai=needs_ai,
         rationale=_rationale(labels, priority, review, review_reason, protection),
+        forced_vendor_label=forced_vendor_label,
     )
 
     _assert_safety_invariants(classification, signals)

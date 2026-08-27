@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.classification.context import ClassificationContext, build_rule
+from app.classification.context import ClassificationContext, build_rule, build_vendor_rule
 from app.classification.engine import Classification, classify
 from app.classification.labels import (
     LABEL_POLICIES,
@@ -100,6 +100,93 @@ def test_manual_rule_outranks_deterministic_classification(context) -> None:
 
     assert result.has(Label.PERSONAL)
     assert not result.has(Label.FINANCIAL)
+
+
+def test_vendor_rule_subject_contains_swaps_out_financial(context) -> None:
+    """A config-defined vendor rule (CLAUDE.md §11) replaces categorization
+    the same way classify_as sender/domain rules already do."""
+    rule = build_vendor_rule(match="subject_contains", value="equity", label="Equity")
+    context.vendor_rules = (rule,)
+
+    result = classify(
+        make_message(
+            sender="statements@equitybank.co.ke",
+            subject="Your Equity account statement",
+        ),
+        context,
+    )
+
+    assert result.forced_vendor_label == "Equity"
+    assert not result.has(Label.FINANCIAL)
+
+
+def test_vendor_rule_sender_contains_matches_domain(context) -> None:
+    rule = build_vendor_rule(match="sender_contains", value="arvocap", label="Arvocap")
+    context.vendor_rules = (rule,)
+
+    result = classify(
+        make_message(
+            sender="statements@arvocap.co.ke",
+            subject="Your monthly portfolio statement",
+        ),
+        context,
+    )
+
+    assert result.forced_vendor_label == "Arvocap"
+    assert not result.has(Label.FINANCIAL)
+
+
+def test_vendor_rule_sender_contains_matches_display_name(context) -> None:
+    rule = build_vendor_rule(match="sender_contains", value="arvocap", label="Arvocap")
+    context.vendor_rules = (rule,)
+
+    result = classify(
+        make_message(
+            sender="noreply@genericmailer.com",
+            sender_name="Arvocap Asset Managers",
+            subject="Your monthly portfolio statement",
+        ),
+        context,
+    )
+
+    assert result.forced_vendor_label == "Arvocap"
+    assert not result.has(Label.FINANCIAL)
+
+
+def test_vendor_rule_does_not_match_unrelated_mail(context) -> None:
+    rule = build_vendor_rule(match="subject_contains", value="equity", label="Equity")
+    context.vendor_rules = (rule,)
+
+    result = classify(
+        make_message(sender="statements@mybank.com", subject="Your monthly statement"),
+        context,
+    )
+
+    assert result.forced_vendor_label is None
+    assert result.has(Label.FINANCIAL)
+
+
+def test_existing_sender_rule_outranks_a_vendor_rule(context) -> None:
+    """An explicit, exact sender-level classify_as rule wins over a
+    substring-based vendor rule for the same message."""
+    sender_rule = build_rule(
+        "statements@equitybank.co.ke", "classify_as", action="Personal", scope="sender"
+    )
+    context.sender_rules[sender_rule.target] = sender_rule
+    context.vendor_rules = (
+        build_vendor_rule(match="subject_contains", value="equity", label="Equity"),
+    )
+
+    result = classify(
+        make_message(
+            sender="statements@equitybank.co.ke",
+            subject="Your Equity account statement",
+        ),
+        context,
+    )
+
+    assert result.has(Label.PERSONAL)
+    assert result.forced_vendor_label is None
 
 
 def test_manual_blacklist_outranks_relationship(context) -> None:

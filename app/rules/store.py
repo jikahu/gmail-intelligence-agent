@@ -47,12 +47,26 @@ class DomainRuleRow:
 
 
 @dataclass(frozen=True)
+class VendorRuleRow:
+    """A config-defined swap: mail matching ``value`` gets ``label`` instead
+    of whatever the deterministic engine would otherwise categorize it as
+    (CLAUDE.md §11) -- e.g. "subject contains 'equity'" -> the "Equity"
+    label the user already made by hand, instead of "Financial"."""
+
+    match: str
+    value: str
+    label: str
+    source: str = "manual"
+
+
+@dataclass(frozen=True)
 class RulesFile:
     """The parsed contents of ``config/rules.toml``."""
 
     vip_emails: frozenset[str] = field(default_factory=frozenset)
     sender_rules: tuple[SenderRuleRow, ...] = ()
     domain_rules: tuple[DomainRuleRow, ...] = ()
+    vendor_rules: tuple[VendorRuleRow, ...] = ()
 
 
 def _load_raw(path: Path) -> dict:
@@ -106,9 +120,30 @@ def load_rules(path: Path | None = None) -> RulesFile:
         if str(row.get("domain", "")).strip()
     )
 
+    vendor_rules = tuple(
+        VendorRuleRow(
+            match=str(row.get("match", "")).strip(),
+            value=str(row.get("value", "")).strip(),
+            label=str(row.get("label", "")).strip(),
+            source=str(row.get("source", "manual")).strip(),
+        )
+        for row in raw.get("vendor_rules", []) or []
+        if str(row.get("value", "")).strip() and str(row.get("label", "")).strip()
+    )
+
     return RulesFile(
-        vip_emails=vip_emails, sender_rules=sender_rules, domain_rules=domain_rules
+        vip_emails=vip_emails,
+        sender_rules=sender_rules,
+        domain_rules=domain_rules,
+        vendor_rules=vendor_rules,
     )
 
 
-__all__ = ("RULES_FILE", "DomainRuleRow", "RulesFile", "SenderRuleRow", "load_rules")
+__all__ = (
+    "RULES_FILE",
+    "DomainRuleRow",
+    "RulesFile",
+    "SenderRuleRow",
+    "VendorRuleRow",
+    "load_rules",
+)

@@ -262,10 +262,26 @@ def label_name_map_for(
     return ensured
 
 
-def vendor_label_for(client: GmailWriteClient, message: EmailMessage) -> str | None:
-    """Look up an existing Gmail label the user already made that this
-    message's sender matches (see :mod:`app.gmail.vendor_labels`)."""
-    return match_existing_label(client.label_names(), message)
+def vendor_label_for(
+    client: GmailWriteClient, message: EmailMessage, forced: str | None = None
+) -> str | None:
+    """The extra Gmail label to apply alongside the taxonomy, or ``None``.
+
+    ``forced`` — a :attr:`~app.classification.engine.Classification.forced_vendor_label`
+    from a ``config/rules.toml`` vendor rule (CLAUDE.md §11) — wins when given,
+    but only if it names a label that already exists; this app never creates
+    one just because a rule named it. Falling back to the automatic
+    sender-based matcher in that case would apply an unrelated label the rule
+    didn't ask for, so a forced name that doesn't exist yet simply means no
+    vendor label this cycle, not "guess something else".
+
+    Otherwise falls back to the automatic sender-domain/name match against
+    an existing label the user already made by hand (:mod:`app.gmail.vendor_labels`).
+    """
+    existing = client.label_names()
+    if forced:
+        return next((name for name in existing if name.lower() == forced.lower()), None)
+    return match_existing_label(existing, message)
 
 
 __all__ = (

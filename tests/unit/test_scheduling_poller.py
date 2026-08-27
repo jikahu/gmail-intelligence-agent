@@ -265,6 +265,50 @@ def test_gate_open_also_applies_a_matched_existing_label(
     assert "Purchases-Receipts" in added
 
 
+def test_gate_open_prefers_a_forced_vendor_label_over_the_automatic_match(
+    gmail, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A vendor_rules match (CLAUDE.md §11) names its own label directly on
+    the Classification -- that takes priority over the sender-domain/name
+    auto-matcher, and lands even when the sender wouldn't auto-match at all."""
+    _open_gate(monkeypatch)
+    gmail.history_pages = [_history_page([_added("m1", "t1")], "150")]
+    gmail.threads["t1"] = _thread(
+        gmail_message(
+            message_id="m1",
+            thread_id="t1",
+            headers={
+                "From": "statements@equitybank.co.ke",
+                "To": USER_EMAIL,
+                "Subject": "Your Equity account statement",
+            },
+            plain_body="Your statement is ready.",
+            labels=["INBOX"],
+        )
+    )
+
+    write_client = FakeWriteClient(
+        initial_labels={"m1": ["INBOX"]}, existing_labels={"Equity"}
+    )
+    monkeypatch.setattr("app.gmail.write_client.get_write_client", lambda: write_client)
+
+    decision = Classification(
+        labels=set(),
+        keep_in_inbox=False,
+        archive=True,
+        mark_important=False,
+        forced_vendor_label="Equity",
+    )
+    _stub_classify(monkeypatch, decision)
+
+    report = poller_mod.run_poll_cycle(use_ai=False)
+
+    assert report.changed_count == 1
+    _message_id, added, _removed = write_client.modify_calls[0]
+    assert "Equity" in added
+    assert "Financial" not in added
+
+
 def test_reprocessing_the_same_already_correct_message_is_a_no_op(
     gmail, monkeypatch: pytest.MonkeyPatch
 ) -> None:

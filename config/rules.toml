@@ -19,6 +19,17 @@
 # Domain rules on public mail providers (gmail.com, outlook.com, ...) are
 # silently ignored -- approving one person at gmail.com must never trust
 # every Gmail address on earth.
+#
+# vendor_rules swap out categorization for an existing Gmail label you
+# already made by hand, instead of the usual category label (e.g. Financial).
+# match is one of:
+#   subject_contains -- value is matched against the subject only
+#   sender_contains   -- value is matched against the sender's domain OR
+#                         display name (either counts)
+# `label` must already exist in your mailbox -- this app never creates a
+# label just because a rule names it. If it doesn't exist yet, the message
+# still skips ordinary categorization but gets no extra label until you
+# create it.
 
 # [[vips]]
 # email = "someone@example.com"
@@ -32,3 +43,13 @@
 # domain = "chase.com"
 # rule_type = "whitelist"
 # action = ""
+
+[[vendor_rules]]
+match = "subject_contains"
+value = "equity"
+label = "Equity"
+
+[[vendor_rules]]
+match = "sender_contains"
+value = "arvocap"
+label = "Arvocap"
